@@ -1,4 +1,5 @@
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
+import Link from "next/link";
 
 export default async function Dashboard() {
   const session = await auth();
@@ -9,44 +10,6 @@ export default async function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">ResumeForge</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                {session.user.image && (
-                  <img
-                    src={session.user.image}
-                    alt={session.user.name || "User"}
-                    className="w-8 h-8 rounded-full"
-                  />
-                )}
-                <span className="text-sm font-medium text-gray-700">
-                  {session.user.name}
-                </span>
-              </div>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut();
-                }}
-              >
-                <button
-                  type="submit"
-                  className="text-gray-500 hover:text-gray-700 text-sm font-medium"
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
@@ -54,6 +17,28 @@ export default async function Dashboard() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome back, {session.user.name?.split(" ")[0]}! 👋
           </h2>
+          <p className="text-gray-600 mb-6">
+            Ready to create your next professional resume?
+          </p>
+          <Link
+            href="/editor"
+            className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-sm"
+          >
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+            Create New Resume
+          </Link>
         </div>
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import SignIn from "@/components/sign-in";
 import Dashboard from "@/components/dashboard";
+import AuthenticatedHeader from "@/components/authenticated-header";
 
 export default async function Home() {
   const session = await auth();
@@ -9,5 +10,10 @@ export default async function Home() {
     return <SignIn />;
   }
 
-  return <Dashboard />;
+  return (
+    <>
+      <AuthenticatedHeader />
+      <Dashboard />
+    </>
+  );
 }

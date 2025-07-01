@@ -12,5 +12,16 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  latex-api:
+    build:
+      context: ./latex-api
+      dockerfile: Dockerfile
+    container_name: resume-latex-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
