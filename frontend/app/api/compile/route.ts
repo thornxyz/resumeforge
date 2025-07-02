@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import axios from "axios";
 
 export async function POST(req: NextRequest) {
     const body = await req.formData();
@@ -12,24 +13,33 @@ export async function POST(req: NextRequest) {
     const form = new FormData();
     form.append("file", file, "resume.tex");
 
-    const response = await fetch("http://localhost:8000/compile", {
-        method: "POST",
-        body: form,
-    });
+    try {
+        const response = await axios.post("http://localhost:8000/compile", form, {
+            responseType: "arraybuffer",
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        });
 
-    if (!response.ok) {
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        return new NextResponse(blob, {
+            status: 200,
+            headers: {
+                "Content-Type": "application/pdf",
+                "Content-Disposition": "inline; filename=compiled.pdf",
+            },
+        });
+    } catch (error) {
+        console.error("Compilation error:", error);
+        if (axios.isAxiosError(error) && error.response) {
+            return NextResponse.json(
+                { error: "LaTeX compilation failed", details: error.message },
+                { status: error.response.status }
+            );
+        }
         return NextResponse.json(
-            { error: "LaTeX compilation failed" },
-            { status: response.status }
+            { error: "LaTeX compilation failed", details: error instanceof Error ? error.message : "Unknown error" },
+            { status: 500 }
         );
     }
-
-    const blob = await response.blob();
-    return new NextResponse(blob, {
-        status: 200,
-        headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": "inline; filename=compiled.pdf",
-        },
-    });
 }

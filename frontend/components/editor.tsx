@@ -13,7 +13,13 @@ export default function LatexEditor({
       defaultLanguage="latex"
       value={value}
       onChange={onChange}
-      theme="vs-dark"
+      theme="light"
+      options={{
+        fontSize: 16,
+        minimap: {
+          enabled: false,
+        },
+      }}
     />
   );
 }
