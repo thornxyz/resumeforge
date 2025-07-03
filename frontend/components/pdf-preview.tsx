@@ -1,4 +1,55 @@
-export default function PdfPreview({ pdfUrl }: { pdfUrl: string }) {
+"use client";
+
+import { useState, useCallback, useMemo } from "react";
+import { useResizeObserver } from "@wojtekmaj/react-hooks";
+import { pdfjs, Document, Page } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+import type { PDFDocumentProxy } from "pdfjs-dist";
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
+
+const resizeObserverOptions = {};
+const maxWidth = 800;
+
+export default function PdfPreview({
+  pdfUrl,
+  zoom = 100,
+}: {
+  pdfUrl: string;
+  zoom?: number;
+}) {
+  const [numPages, setNumPages] = useState<number>();
+  const [containerRef, setContainerRef] = useState<HTMLElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number>();
+
+  const options = useMemo(
+    () => ({
+      cMapUrl: "/cmaps/",
+      standardFontDataUrl: "/standard_fonts/",
+    }),
+    []
+  );
+
+  const onResize = useCallback<ResizeObserverCallback>((entries) => {
+    const [entry] = entries;
+    if (entry) {
+      setContainerWidth(entry.contentRect.width);
+    }
+  }, []);
+
+  useResizeObserver(containerRef, resizeObserverOptions, onResize);
+
+  function onDocumentLoadSuccess({
+    numPages: nextNumPages,
+  }: PDFDocumentProxy): void {
+    setNumPages(nextNumPages);
+  }
+
   if (!pdfUrl) {
     return (
       <div className="w-full h-[600px] border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
@@ -23,5 +74,26 @@ export default function PdfPreview({ pdfUrl }: { pdfUrl: string }) {
     );
   }
 
-  return <iframe src={pdfUrl} className="w-full h-[600px] border rounded-lg" />;
+  return (
+    <div className="w-full h-[600px] overflow-auto" ref={setContainerRef}>
+      <Document
+        file={pdfUrl}
+        onLoadSuccess={onDocumentLoadSuccess}
+        options={options}
+      >
+        {Array.from(new Array(numPages), (_el, index) => (
+          <Page
+            key={`page_${index + 1}`}
+            pageNumber={index + 1}
+            width={
+              containerWidth
+                ? Math.min(containerWidth * (zoom / 100), maxWidth)
+                : maxWidth * (zoom / 100)
+            }
+            className="mb-4"
+          />
+        ))}
+      </Document>
+    </div>
+  );
 }

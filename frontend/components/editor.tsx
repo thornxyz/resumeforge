@@ -15,7 +15,7 @@ export default function LatexEditor({
 
   return (
     <Editor
-      height="600px"
+      height="635px"
       defaultLanguage="latex"
       value={value}
       onChange={onChange}
