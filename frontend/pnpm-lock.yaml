@@ -20,6 +20,9 @@ importers:
       axios:
         specifier: ^1.10.0
         version: 1.10.0
+      monaco-latex:
+        specifier: ^0.0.1
+        version: 0.0.1(monaco-editor@0.52.2)
       next:
         specifier: 15.3.4
         version: 15.3.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -643,6 +646,11 @@ packages:
 
   monaco-editor@0.52.2:
     resolution: {integrity: sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==}
+
+  monaco-latex@0.0.1:
+    resolution: {integrity: sha512-N7yyblXFj4iXmHdO3wLFpXKN3BpWJik2N+MG4wph7fgBmEw+xMJNeGWkjxycLUDgZkFzGIim2OpYk4uWFL0kdg==}
+    peerDependencies:
+      monaco-editor: '>=0.20.0'
 
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
@@ -1282,6 +1290,10 @@ snapshots:
   mkdirp@3.0.1: {}
 
   monaco-editor@0.52.2: {}
+
+  monaco-latex@0.0.1(monaco-editor@0.52.2):
+    dependencies:
+      monaco-editor: 0.52.2
 
   nanoid@3.3.11: {}
 

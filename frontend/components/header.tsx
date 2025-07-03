@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { handleSignOut } from "@/lib/actions";
 import Link from "next/link";
+import Image from "next/image";
 
 export default async function Header() {
   const session = await auth();
@@ -21,7 +22,9 @@ export default async function Header() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-3">
               {session.user.image && (
-                <img
+                <Image
+                  width={32}
+                  height={32}
                   src={session.user.image}
                   alt={session.user.name || "User"}
                   className="w-8 h-8 rounded-full"

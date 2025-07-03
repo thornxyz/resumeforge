@@ -1,4 +1,5 @@
 import Editor from "@monaco-editor/react";
+import latex from "monaco-latex";
 
 export default function LatexEditor({
   value,
@@ -7,6 +8,11 @@ export default function LatexEditor({
   value: string;
   onChange: (val: string | undefined) => void;
 }) {
+  const handleEditorWillMount = (monaco: any) => {
+    monaco.languages.register({ id: "latex" });
+    monaco.languages.setMonarchTokensProvider("latex", latex);
+  };
+
   return (
     <Editor
       height="600px"
@@ -14,11 +20,13 @@ export default function LatexEditor({
       value={value}
       onChange={onChange}
       theme="light"
+      beforeMount={handleEditorWillMount}
       options={{
-        fontSize: 16,
+        fontSize: 12,
         minimap: {
           enabled: false,
         },
+        lineNumbersMinChars: 2,
       }}
     />
   );

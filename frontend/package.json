@@ -13,6 +13,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@prisma/client": "^6.11.0",
     "axios": "^1.10.0",
+    "monaco-latex": "^0.0.1",
     "next": "15.3.4",
     "next-auth": "5.0.0-beta.29",
     "react": "^19.0.0",
