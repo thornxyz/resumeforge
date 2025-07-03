@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import LatexEditor from "@/components/editor";
 import axios from "axios";
@@ -15,12 +15,43 @@ interface User {
   image?: string | null;
 }
 
-export default function EditorContent({ user }: { user: User }) {
+interface Resume {
+  id: string;
+  title: string;
+  latexContent: string;
+  pdfUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export default function EditorContent({
+  user,
+  initialResume,
+}: {
+  user: User;
+  initialResume?: Resume | null;
+}) {
   const [latex, setLatex] = useState<string>(
-    "\\documentclass{article}\\begin{document}Hello, world!\\end{document}"
+    initialResume?.latexContent ||
+      "\\documentclass{article}\\begin{document}Hello, world!\\end{document}"
   );
   const [pdfUrl, setPdfUrl] = useState<string>("");
   const [zoom, setZoom] = useState<number>(100);
+  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
+  const [resumeTitle, setResumeTitle] = useState<string>(
+    initialResume?.title || ""
+  );
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [currentResumeId, setCurrentResumeId] = useState<string | null>(
+    initialResume?.id || null
+  );
+
+  // Load existing PDF if available
+  useEffect(() => {
+    if (initialResume?.pdfUrl) {
+      setPdfUrl(initialResume.pdfUrl);
+    }
+  }, [initialResume]);
 
   const handleCompile = async () => {
     try {
@@ -48,6 +79,69 @@ export default function EditorContent({ user }: { user: User }) {
         console.error("Axios error details:", error.response?.data);
       }
       // You might want to show an error message to the user here
+    }
+  };
+
+  const handleSave = async () => {
+    if (!resumeTitle.trim()) {
+      alert("Please enter a title for your resume");
+      return;
+    }
+
+    if (!pdfUrl) {
+      alert("Please compile your resume first");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Get the PDF blob from the current URL
+      const pdfResponse = await fetch(pdfUrl);
+      const pdfBlob = await pdfResponse.blob();
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append("title", resumeTitle);
+      formData.append("latexContent", latex);
+      formData.append("pdf", pdfBlob, "resume.pdf");
+
+      let response;
+
+      if (currentResumeId) {
+        // Update existing resume
+        formData.append("resumeId", currentResumeId);
+        response = await axios.put("/api/update-resume", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      } else {
+        // Create new resume
+        response = await axios.post("/api/save-resume", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      }
+
+      if (response.data.success) {
+        const message = currentResumeId
+          ? "Resume updated successfully!"
+          : "Resume saved successfully!";
+        alert(message);
+        setShowSaveModal(false);
+
+        // If this was a new resume, set the ID for future updates
+        if (!currentResumeId) {
+          setCurrentResumeId(response.data.id);
+        }
+      }
+    } catch (error) {
+      console.error("Error saving resume:", error);
+      const action = currentResumeId ? "update" : "save";
+      alert(`Failed to ${action} resume. Please try again.`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -86,6 +180,13 @@ export default function EditorContent({ user }: { user: User }) {
               Compile
             </button>
             <button
+              onClick={() => setShowSaveModal(true)}
+              disabled={!pdfUrl}
+              className="bg-purple-500 px-3 py-1 text-white text-sm rounded hover:bg-purple-600 disabled:bg-gray-300"
+            >
+              {currentResumeId ? "Update" : "Save"}
+            </button>
+            <button
               onClick={handleZoomIn}
               disabled={zoom >= 200}
               className="bg-gray-500 px-2 py-1 text-white text-sm rounded hover:bg-gray-600 disabled:bg-gray-300"
@@ -111,6 +212,59 @@ export default function EditorContent({ user }: { user: User }) {
           <PdfPreview pdfUrl={pdfUrl} zoom={zoom} />
         </div>
       </div>
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">
+              {currentResumeId ? "Update Resume" : "Save Resume"}
+            </h3>
+            <div className="mb-4">
+              <label
+                htmlFor="resumeTitle"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Resume Title
+              </label>
+              <input
+                type="text"
+                id="resumeTitle"
+                value={resumeTitle}
+                onChange={(e) => setResumeTitle(e.target.value)}
+                placeholder="e.g., Software Engineer Resume"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowSaveModal(false);
+                  setResumeTitle("");
+                }}
+                disabled={isSaving}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !resumeTitle.trim()}
+                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300"
+              >
+                {isSaving
+                  ? currentResumeId
+                    ? "Updating..."
+                    : "Saving..."
+                  : currentResumeId
+                  ? "Update Resume"
+                  : "Save Resume"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
