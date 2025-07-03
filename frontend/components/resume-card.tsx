@@ -2,6 +2,7 @@
 
 import { deleteResume } from "@/lib/actions";
 import Link from "next/link";
+import { toast } from "sonner";
 
 interface Resume {
   id: string;
@@ -17,8 +18,9 @@ export default function ResumeCard({ resume }: { resume: Resume }) {
     if (confirm("Are you sure you want to delete this resume?")) {
       try {
         await deleteResume(resume.id);
+        toast.success("Resume deleted successfully");
       } catch (error) {
-        alert("Failed to delete resume");
+        toast.error("Failed to delete resume");
       }
     }
   };
