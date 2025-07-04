@@ -15,6 +15,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { IoChevronBackSharp } from "react-icons/io5";
+import { IoMdDownload } from "react-icons/io";
 
 const PdfPreview = dynamic(() => import("@/components/pdf-preview"), {
   ssr: false,
@@ -167,26 +169,12 @@ export default function EditorContent({
         </div>
         <div>
           <div className="flex justify-between items-center mb-2">
-            <Link
-              href="/"
-              className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200 transition-colors"
-            >
-              <svg
-                className="w-4 h-4 mr-1"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              Back
+            <Link href="/">
+              <div className="flex items-center px-3 py-1.5 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-200 ">
+                <IoChevronBackSharp className="mr-1.5" />
+                Back
+              </div>
             </Link>
-
             <div className="flex gap-2">
               <button
                 onClick={handleCompile}
@@ -256,26 +244,31 @@ export default function EditorContent({
                   </div>
                 </DialogContent>
               </Dialog>
-              <button
-                onClick={handleZoomIn}
-                disabled={zoom >= 200}
-                className="bg-gray-500 px-2 py-1 text-white text-sm rounded hover:bg-gray-600 disabled:bg-gray-300"
-              >
-                +
-              </button>
-              <button
-                onClick={handleZoomOut}
-                disabled={zoom <= 50}
-                className="bg-gray-500 px-2 py-1 text-white text-sm rounded hover:bg-gray-600 disabled:bg-gray-300"
-              >
-                -
-              </button>
-              <span className="px-2 py-1 text-sm text-gray-600">{zoom}%</span>
+              <div className="flex items-center bg-white border border-gray-300 rounded-lg shadow-sm">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={zoom <= 50}
+                  className="px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-r border-gray-200"
+                >
+                  -
+                </button>
+                <span className="px-3 py-1 text-sm font-medium text-gray-700 min-w-[50px] text-center bg-gray-50">
+                  {zoom}%
+                </span>
+                <button
+                  onClick={handleZoomIn}
+                  disabled={zoom >= 200}
+                  className="px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-l border-gray-200"
+                >
+                  +
+                </button>
+              </div>
               <button
                 onClick={handleDownload}
                 disabled={!pdfUrl}
-                className="bg-green-500 px-3 py-1 text-white text-sm rounded hover:bg-green-600 disabled:bg-gray-300"
+                className="flex items-center bg-green-500 px-3 py-1 text-white text-sm rounded hover:bg-green-600 disabled:bg-gray-300"
               >
+                <IoMdDownload className="mr-1.5" />
                 Download
               </button>
             </div>

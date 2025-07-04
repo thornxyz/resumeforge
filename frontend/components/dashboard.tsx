@@ -3,6 +3,8 @@ import Link from "next/link";
 import { getUserResumes } from "@/lib/actions";
 import ResumeCard from "./resume-card";
 import { Resume } from "@/lib/types";
+import { IoMdCreate } from "react-icons/io";
+import { IoDocumentTextOutline } from "react-icons/io5";
 
 export default async function Dashboard() {
   const session = await auth();
@@ -27,21 +29,9 @@ export default async function Dashboard() {
           </p>
           <Link
             href="/editor"
-            className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-sm"
+            className="inline-flex items-center px-4 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-sm"
           >
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
+            <IoMdCreate className="mr-2" size={19} />
             Create New Resume
           </Link>
         </div>
@@ -52,20 +42,11 @@ export default async function Dashboard() {
             Your Resumes
           </h3>
           {resumes.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
-              <svg
-                className="w-12 h-12 mx-auto text-gray-400 mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
+            <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
+              <IoDocumentTextOutline
+                className="mx-auto mb-2 text-gray-500"
+                size={100}
+              />
               <h4 className="text-lg font-medium text-gray-900 mb-2">
                 No resumes yet
               </h4>
