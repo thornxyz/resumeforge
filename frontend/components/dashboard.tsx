@@ -2,15 +2,7 @@ import { auth } from "@/auth";
 import Link from "next/link";
 import { getUserResumes } from "@/lib/actions";
 import ResumeCard from "./resume-card";
-
-interface Resume {
-  id: string;
-  title: string;
-  latexContent: string;
-  pdfUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { Resume } from "@/lib/types";
 
 export default async function Dashboard() {
   const session = await auth();

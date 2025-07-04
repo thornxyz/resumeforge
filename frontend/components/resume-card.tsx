@@ -3,17 +3,9 @@
 import { deleteResume } from "@/lib/actions";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Resume, ResumeCardProps } from "@/lib/types";
 
-interface Resume {
-  id: string;
-  title: string;
-  latexContent: string;
-  pdfUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export default function ResumeCard({ resume }: { resume: Resume }) {
+export default function ResumeCard({ resume }: ResumeCardProps) {
   const handleDelete = async () => {
     if (confirm("Are you sure you want to delete this resume?")) {
       try {

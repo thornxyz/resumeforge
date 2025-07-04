@@ -12,6 +12,7 @@
     "@auth/prisma-adapter": "^2.10.0",
     "@monaco-editor/react": "^4.7.0",
     "@prisma/client": "^6.11.0",
+    "@radix-ui/react-dialog": "^1.1.14",
     "@wojtekmaj/react-hooks": "^2.0.0",
     "axios": "^1.10.0",
     "class-variance-authority": "^0.7.1",

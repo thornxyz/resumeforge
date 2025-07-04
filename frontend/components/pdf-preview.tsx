@@ -5,6 +5,7 @@ import { useResizeObserver } from "@wojtekmaj/react-hooks";
 import { pdfjs, Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { PdfPreviewProps } from "@/lib/types";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
@@ -16,13 +17,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 const resizeObserverOptions = {};
 const maxWidth = 800;
 
-export default function PdfPreview({
-  pdfUrl,
-  zoom = 100,
-}: {
-  pdfUrl: string;
-  zoom?: number;
-}) {
+export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
   const [numPages, setNumPages] = useState<number>();
   const [containerRef, setContainerRef] = useState<HTMLElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>();

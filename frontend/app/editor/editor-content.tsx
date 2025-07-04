@@ -6,33 +6,24 @@ import LatexEditor from "@/components/editor";
 import axios from "axios";
 import { toast } from "sonner";
 import Link from "next/link";
+import { User, Resume, EditorContentProps } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const PdfPreview = dynamic(() => import("@/components/pdf-preview"), {
   ssr: false,
 });
 
-interface User {
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-}
-
-interface Resume {
-  id: string;
-  title: string;
-  latexContent: string;
-  pdfUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export default function EditorContent({
   user,
   initialResume,
-}: {
-  user: User;
-  initialResume?: Resume | null;
-}) {
+}: EditorContentProps) {
   const [latex, setLatex] = useState<string>(
     initialResume?.latexContent ||
       "\\documentclass{article}\\begin{document}Hello, world!\\end{document}"
@@ -203,13 +194,68 @@ export default function EditorContent({
               >
                 Compile
               </button>
-              <button
-                onClick={() => setShowSaveModal(true)}
-                disabled={!pdfUrl}
-                className="bg-purple-500 px-3 py-1 text-white text-sm rounded hover:bg-purple-600 disabled:bg-gray-300"
-              >
-                {currentResumeId ? "Update" : "Save"}
-              </button>
+              <Dialog open={showSaveModal} onOpenChange={setShowSaveModal}>
+                <DialogTrigger asChild>
+                  <button
+                    disabled={!pdfUrl}
+                    className="bg-purple-500 px-3 py-1 text-white text-sm rounded hover:bg-purple-600 disabled:bg-gray-300"
+                  >
+                    {currentResumeId ? "Update" : "Save"}
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {currentResumeId ? "Update Resume" : "Save Resume"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Enter a title for your resume to save it.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mb-4">
+                    <label
+                      htmlFor="resumeTitle"
+                      className="block text-sm font-medium text-gray-700 mb-2"
+                    >
+                      Resume Title
+                    </label>
+                    <input
+                      type="text"
+                      id="resumeTitle"
+                      value={resumeTitle}
+                      onChange={(e) => setResumeTitle(e.target.value)}
+                      placeholder="e.g., Software Engineer Resume"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      disabled={isSaving}
+                    />
+                  </div>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => {
+                        setShowSaveModal(false);
+                        setResumeTitle("");
+                      }}
+                      disabled={isSaving}
+                      className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving || !resumeTitle.trim()}
+                      className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300"
+                    >
+                      {isSaving
+                        ? currentResumeId
+                          ? "Updating..."
+                          : "Saving..."
+                        : currentResumeId
+                        ? "Update Resume"
+                        : "Save Resume"}
+                    </button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               <button
                 onClick={handleZoomIn}
                 disabled={zoom >= 200}
@@ -222,7 +268,7 @@ export default function EditorContent({
                 disabled={zoom <= 50}
                 className="bg-gray-500 px-2 py-1 text-white text-sm rounded hover:bg-gray-600 disabled:bg-gray-300"
               >
-                −
+                -
               </button>
               <span className="px-2 py-1 text-sm text-gray-600">{zoom}%</span>
               <button
@@ -237,59 +283,6 @@ export default function EditorContent({
           <PdfPreview pdfUrl={pdfUrl} zoom={zoom} />
         </div>
       </div>
-
-      {/* Save Modal */}
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">
-              {currentResumeId ? "Update Resume" : "Save Resume"}
-            </h3>
-            <div className="mb-4">
-              <label
-                htmlFor="resumeTitle"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Resume Title
-              </label>
-              <input
-                type="text"
-                id="resumeTitle"
-                value={resumeTitle}
-                onChange={(e) => setResumeTitle(e.target.value)}
-                placeholder="e.g., Software Engineer Resume"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                disabled={isSaving}
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowSaveModal(false);
-                  setResumeTitle("");
-                }}
-                disabled={isSaving}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !resumeTitle.trim()}
-                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300"
-              >
-                {isSaving
-                  ? currentResumeId
-                    ? "Updating..."
-                    : "Saving..."
-                  : currentResumeId
-                  ? "Update Resume"
-                  : "Save Resume"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
