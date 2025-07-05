@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useResizeObserver } from "@wojtekmaj/react-hooks";
 import { pdfjs, Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -10,11 +10,7 @@ import { IoDocumentTextOutline } from "react-icons/io5";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
-
+// Move worker initialization inside useEffect to handle fast refresh
 const resizeObserverOptions = {};
 const maxWidth = 800;
 
@@ -22,6 +18,16 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
   const [numPages, setNumPages] = useState<number>();
   const [containerRef, setContainerRef] = useState<HTMLElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>();
+
+  // Initialize PDF.js worker on component mount to handle fast refresh
+  useEffect(() => {
+    if (typeof window !== "undefined" && !pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url
+      ).toString();
+    }
+  }, []);
 
   const options = useMemo(
     () => ({
@@ -48,7 +54,7 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
 
   if (!pdfUrl) {
     return (
-      <div className="w-full h-[600px] border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+      <div className="w-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
         <div className="text-center text-gray-500">
           <IoDocumentTextOutline className="mx-auto mb-2" size={80} />
           <p className="text-lg font-medium">PDF Preview</p>
@@ -59,11 +65,12 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
   }
 
   return (
-    <div className="w-full h-[600px] overflow-auto" ref={setContainerRef}>
+    <div className="w-full  overflow-auto" ref={setContainerRef}>
       <Document
         file={pdfUrl}
         onLoadSuccess={onDocumentLoadSuccess}
         options={options}
+        className="flex"
       >
         {Array.from(new Array(numPages), (_el, index) => (
           <Page
@@ -71,10 +78,10 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
             pageNumber={index + 1}
             width={
               containerWidth
-                ? Math.min(containerWidth * (zoom / 100), maxWidth)
+                ? containerWidth * (zoom / 100)
                 : maxWidth * (zoom / 100)
             }
-            className="mb-4"
+            className=" bg-gray-100! mx-auto"
           />
         ))}
       </Document>

@@ -161,19 +161,19 @@ export default function EditorContent({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Main Content */}
-      <div className="grid grid-cols-2 gap-4 p-4">
+      <div className="grid grid-cols-2 gap-2 p-2">
         <div>
           <LatexEditor value={latex} onChange={(val) => setLatex(val ?? "")} />
         </div>
         <div>
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex justify-between items-center mb-1">
             <Link href="/">
-              <div className="flex items-center px-3 py-1.5 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-200 ">
-                <IoChevronBackSharp className="mr-1.5" />
+              <button className="flex items-center px-2 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-200 ">
+                <IoChevronBackSharp className="mr-1" />
                 Back
-              </div>
+              </button>
             </Link>
             <div className="flex gap-2">
               <button
@@ -244,7 +244,7 @@ export default function EditorContent({
                   </div>
                 </DialogContent>
               </Dialog>
-              <div className="flex items-center bg-white border border-gray-300 rounded-lg shadow-sm">
+              <div className="flex items-center bg-white rounded-lg text-sm shadow-sm">
                 <button
                   onClick={handleZoomOut}
                   disabled={zoom <= 50}
@@ -252,7 +252,7 @@ export default function EditorContent({
                 >
                   -
                 </button>
-                <span className="px-3 py-1 text-sm font-medium text-gray-700 min-w-[50px] text-center bg-gray-50">
+                <span className="px-3 py-1 font-medium text-gray-700 min-w-[50px] text-center bg-gray-50">
                   {zoom}%
                 </span>
                 <button

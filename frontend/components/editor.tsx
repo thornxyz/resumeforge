@@ -10,18 +10,19 @@ export default function LatexEditor({ value, onChange }: LatexEditorProps) {
 
   return (
     <Editor
-      height="635px"
+      height={"100%"}
       defaultLanguage="latex"
       value={value}
       onChange={onChange}
       theme="light"
       beforeMount={handleEditorWillMount}
       options={{
-        fontSize: 12,
+        fontSize: 13,
         minimap: {
           enabled: false,
         },
         lineNumbersMinChars: 2,
+        wordWrap: "on",
       }}
     />
   );
