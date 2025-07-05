@@ -54,7 +54,7 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
 
   if (!pdfUrl) {
     return (
-      <div className="w-full border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+      <div className="w-full h-[95%] border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
         <div className="text-center text-gray-500">
           <IoDocumentTextOutline className="mx-auto mb-2" size={80} />
           <p className="text-lg font-medium">PDF Preview</p>

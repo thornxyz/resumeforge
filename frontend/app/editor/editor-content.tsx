@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import LatexEditor from "@/components/editor";
 import axios from "axios";
@@ -40,6 +40,8 @@ export default function EditorContent({
   const [currentResumeId, setCurrentResumeId] = useState<string | null>(
     initialResume?.id || null
   );
+  const [editorWidth, setEditorWidth] = useState<number>(50); // Percentage width
+  const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Load existing PDF if available
   useEffect(() => {
@@ -47,6 +49,54 @@ export default function EditorContent({
       setPdfUrl(initialResume.pdfUrl);
     }
   }, [initialResume]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging) return;
+
+      const containerRect = document
+        .querySelector(".resizable-container")
+        ?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const newWidth =
+        ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      // Constrain between 20% and 80%
+      const constrainedWidth = Math.min(Math.max(newWidth, 20), 80);
+      setEditorWidth(constrainedWidth);
+    },
+    [isDragging]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    } else {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   const handleCompile = async () => {
     try {
@@ -163,32 +213,52 @@ export default function EditorContent({
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Main Content */}
-      <div className="grid grid-cols-2 gap-2 p-2">
-        <div>
+      <div className="resizable-container flex h-screen p-2">
+        <div className="flex flex-col" style={{ width: `${editorWidth}%` }}>
           <LatexEditor value={latex} onChange={(val) => setLatex(val ?? "")} />
         </div>
-        <div>
-          <div className="flex justify-between items-center mb-1">
-            <Link href="/">
-              <button className="flex items-center px-2 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-200 ">
+
+        {/* Resizable splitter */}
+        <div
+          className="w-1.5 hover:bg-gray-400 cursor-col-resize flex-shrink-0 transition-colors flex flex-col items-center justify-center"
+          onMouseDown={handleMouseDown}
+        >
+          <div className="flex flex-col space-y-0.5">
+            <div className="w-1 h-1 bg-gray-500 rounded-full"></div>
+            <div className="w-1 h-1 bg-gray-500 rounded-full"></div>
+            <div className="w-1 h-1 bg-gray-500 rounded-full"></div>
+          </div>
+        </div>
+
+        <div
+          className="flex flex-col px-1"
+          style={{ width: `${100 - editorWidth}%` }}
+        >
+          <div className="flex flex-wrap justify-between items-center mb-1 gap-2">
+            <Link href="/" className="flex-shrink-0">
+              <button className="flex items-center px-2 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-200">
                 <IoChevronBackSharp className="mr-1" />
-                Back
+                <span className="hidden sm:inline">Back</span>
               </button>
             </Link>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-1 sm:gap-2 items-center">
               <button
                 onClick={handleCompile}
-                className="bg-blue-500 px-3 py-1 text-white text-sm rounded hover:bg-blue-600"
+                className="bg-blue-500 px-2 sm:px-3 py-1 text-white text-xs sm:text-sm rounded hover:bg-blue-600 flex-shrink-0"
               >
-                Compile
+                <span className="hidden sm:inline">Compile</span>
+                <span className="sm:hidden">▶</span>
               </button>
               <Dialog open={showSaveModal} onOpenChange={setShowSaveModal}>
                 <DialogTrigger asChild>
                   <button
                     disabled={!pdfUrl}
-                    className="bg-purple-500 px-3 py-1 text-white text-sm rounded hover:bg-purple-600 disabled:bg-gray-300"
+                    className="bg-purple-500 px-2 sm:px-3 py-1 text-white text-xs sm:text-sm rounded hover:bg-purple-600 disabled:bg-gray-300 flex-shrink-0"
                   >
-                    {currentResumeId ? "Update" : "Save"}
+                    <span className="hidden sm:inline">
+                      {currentResumeId ? "Update" : "Save"}
+                    </span>
+                    <span className="sm:hidden">💾</span>
                   </button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
@@ -244,21 +314,21 @@ export default function EditorContent({
                   </div>
                 </DialogContent>
               </Dialog>
-              <div className="flex items-center bg-white rounded-lg text-sm shadow-sm">
+              <div className="flex items-center bg-white rounded-lg text-xs sm:text-sm shadow-sm flex-shrink-0">
                 <button
                   onClick={handleZoomOut}
                   disabled={zoom <= 50}
-                  className="px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-r border-gray-200"
+                  className="px-1 sm:px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-r border-gray-200"
                 >
                   -
                 </button>
-                <span className="px-3 py-1 font-medium text-gray-700 min-w-[50px] text-center bg-gray-50">
+                <span className="px-2 sm:px-3 py-1 font-medium text-gray-700 min-w-[40px] sm:min-w-[50px] text-center bg-gray-50">
                   {zoom}%
                 </span>
                 <button
                   onClick={handleZoomIn}
                   disabled={zoom >= 200}
-                  className="px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-l border-gray-200"
+                  className="px-1 sm:px-2 py-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors border-l border-gray-200"
                 >
                   +
                 </button>
@@ -266,10 +336,10 @@ export default function EditorContent({
               <button
                 onClick={handleDownload}
                 disabled={!pdfUrl}
-                className="flex items-center bg-green-500 px-3 py-1 text-white text-sm rounded hover:bg-green-600 disabled:bg-gray-300"
+                className="flex items-center bg-green-500 px-2 sm:px-3 py-1 text-white text-xs sm:text-sm rounded hover:bg-green-600 disabled:bg-gray-300 flex-shrink-0"
               >
-                <IoMdDownload className="mr-1.5" />
-                Download
+                <IoMdDownload className="mr-0 sm:mr-1.5" />
+                <span className="hidden sm:inline">Download</span>
               </button>
             </div>
           </div>
