@@ -242,7 +242,7 @@ export default function EditorContent({
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1">
+          <div className="flex-1 overflow-hidden">
             {activeTab === "code" ? (
               <LatexEditor
                 value={latex}
