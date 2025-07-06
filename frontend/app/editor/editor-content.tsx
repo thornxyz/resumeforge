@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { IoChevronBackSharp } from "react-icons/io5";
 import { IoMdDownload } from "react-icons/io";
+import Chat from "@/components/chat";
 
 const PdfPreview = dynamic(() => import("@/components/pdf-preview"), {
   ssr: false,
@@ -42,6 +43,7 @@ export default function EditorContent({
   );
   const [editorWidth, setEditorWidth] = useState<number>(50); // Percentage width
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"code" | "chat">("code");
 
   // Load existing PDF if available
   useEffect(() => {
@@ -215,7 +217,41 @@ export default function EditorContent({
       {/* Main Content */}
       <div className="resizable-container flex h-screen p-2">
         <div className="flex flex-col" style={{ width: `${editorWidth}%` }}>
-          <LatexEditor value={latex} onChange={(val) => setLatex(val ?? "")} />
+          {/* Tabs */}
+          <div className="flex mb-0">
+            <button
+              onClick={() => setActiveTab("code")}
+              className={`px-3 py-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "code"
+                  ? "border-blue-500 text-blue-600 bg-blue-50"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Code
+            </button>
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`px-3 py-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "chat"
+                  ? "border-blue-500 text-blue-600 bg-blue-50"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Chat
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="flex-1">
+            {activeTab === "code" ? (
+              <LatexEditor
+                value={latex}
+                onChange={(val) => setLatex(val ?? "")}
+              />
+            ) : (
+              <Chat />
+            )}
+          </div>
         </div>
 
         {/* Resizable splitter */}
