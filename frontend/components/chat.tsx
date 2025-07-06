@@ -3,13 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { IoSend } from "react-icons/io5";
 import { BsRobot } from "react-icons/bs";
-
-interface Message {
-  id: string;
-  content: string;
-  role: "user" | "assistant";
-  timestamp: Date;
-}
+import { Message } from "@/lib/types";
+import axios from "axios";
+import { toast } from "sonner";
 
 function Chat() {
   const [messages, setMessages] = useState<Message[]>([
@@ -57,20 +53,50 @@ function Chat() {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with your actual AI API call
-      // For now, simulate a response
-      setTimeout(() => {
+      // Call the chat API
+      const response = await axios.post("/api/chat", {
+        message: userMessage.content,
+        conversationHistory: messages.slice(-10), // Send last 10 messages for context
+      });
+
+      if (response.data.success) {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: `I understand you said: "${userMessage.content}". This is a placeholder response. You'll need to integrate with an AI service like OpenAI, Anthropic, or your preferred AI provider to get actual AI responses.`,
+          content: response.data.response,
           role: "assistant",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
-        setIsLoading(false);
-      }, 1000);
+      } else {
+        throw new Error(response.data.error || "Failed to get response");
+      }
     } catch (error) {
       console.error("Error sending message:", error);
+
+      // Show error message to user
+      let errorMessage = "Sorry, I'm having trouble responding right now.";
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          errorMessage =
+            "API authentication failed. Please check the configuration.";
+        } else if (error.response?.status === 429) {
+          errorMessage = "API rate limit exceeded. Please try again later.";
+        } else if (error.response?.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+      }
+
+      toast.error(errorMessage);
+
+      // Add error message to chat
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: errorMessage,
+        role: "assistant",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorResponse]);
+    } finally {
       setIsLoading(false);
     }
   };

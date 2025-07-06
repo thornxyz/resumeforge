@@ -41,3 +41,11 @@ export interface PdfPreviewProps {
 export interface ResumeCardProps {
     resume: Resume;
 }
+
+// Chat types
+export interface Message {
+    id: string;
+    content: string;
+    role: "user" | "assistant";
+    timestamp: Date;
+}
