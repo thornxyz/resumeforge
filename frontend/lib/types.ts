@@ -28,6 +28,14 @@ export interface EditorContentProps {
     initialResume?: Resume | null;
 }
 
+export interface ChatProps {
+    latexContent: string;
+    onLatexUpdate: (newLatex: string) => void;
+    onCompile: () => void;
+    messages: Message[];
+    onMessagesUpdate: (messages: Message[]) => void;
+}
+
 export interface LatexEditorProps {
     value: string;
     onChange: (val: string | undefined) => void;

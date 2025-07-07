@@ -70,7 +70,6 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
         file={pdfUrl}
         onLoadSuccess={onDocumentLoadSuccess}
         options={options}
-        className="flex"
       >
         {Array.from(new Array(numPages), (_el, index) => (
           <Page
@@ -81,7 +80,7 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
                 ? containerWidth * (zoom / 100)
                 : maxWidth * (zoom / 100)
             }
-            className=" bg-gray-100! mx-auto"
+            className="mx-auto"
           />
         ))}
       </Document>

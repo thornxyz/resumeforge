@@ -3,22 +3,24 @@
 import { useState, useRef, useEffect } from "react";
 import { IoSend } from "react-icons/io5";
 import { BsRobot } from "react-icons/bs";
-import { Message } from "@/lib/types";
+import { Message, ChatProps } from "@/lib/types";
 import axios from "axios";
 import { toast } from "sonner";
 
-function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      content:
-        "Hello! I'm your AI assistant. I can help you with LaTeX resume writing, formatting, and any questions you might have. How can I assist you today?",
-      role: "assistant",
-      timestamp: new Date(),
-    },
-  ]);
+function Chat({
+  latexContent,
+  onLatexUpdate,
+  onCompile,
+  messages,
+  onMessagesUpdate,
+}: ChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingChange, setPendingChange] = useState<{
+    originalLatex: string;
+    newLatex: string;
+    explanation: string;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -48,7 +50,7 @@ function Chat() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    onMessagesUpdate([...messages, userMessage]);
     setInput("");
     setIsLoading(true);
 
@@ -56,17 +58,43 @@ function Chat() {
       // Call the chat API
       const response = await axios.post("/api/chat", {
         message: userMessage.content,
-        conversationHistory: messages.slice(-10), // Send last 10 messages for context
+        conversationHistory: [...messages, userMessage].slice(-10), // Include the new message
+        latexContent: latexContent,
+        mode: "agent",
       });
 
       if (response.data.success) {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: response.data.response,
+          content: response.data.explanation || response.data.response,
           role: "assistant",
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, assistantMessage]);
+
+        // Update messages with both user and assistant messages
+        const updatedMessages = [...messages, userMessage, assistantMessage];
+        onMessagesUpdate(updatedMessages);
+
+        // If the AI returned modified LaTeX code, show preview with keep/undo options
+        if (
+          response.data.modifiedLatex &&
+          response.data.modifiedLatex !== latexContent
+        ) {
+          setPendingChange({
+            originalLatex: latexContent,
+            newLatex: response.data.modifiedLatex,
+            explanation:
+              response.data.explanation || "LaTeX code has been modified.",
+          });
+
+          // Apply the change immediately for preview
+          onLatexUpdate(response.data.modifiedLatex);
+
+          // Auto-compile to show the preview
+          setTimeout(() => {
+            onCompile();
+          }, 500);
+        }
       } else {
         throw new Error(response.data.error || "Failed to get response");
       }
@@ -95,7 +123,7 @@ function Chat() {
         role: "assistant",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorResponse]);
+      onMessagesUpdate([...messages, userMessage, errorResponse]);
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +138,24 @@ function Chat() {
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const handleKeepChange = () => {
+    setPendingChange(null);
+    toast.success("Changes applied successfully!");
+  };
+
+  const handleUndoChange = () => {
+    if (pendingChange) {
+      onLatexUpdate(pendingChange.originalLatex);
+      setPendingChange(null);
+      toast.info("Changes reverted");
+
+      // Recompile with original content
+      setTimeout(() => {
+        onCompile();
+      }, 500);
+    }
   };
 
   return (
@@ -187,6 +233,34 @@ function Chat() {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Keep/Undo Actions - Show when there's a pending change */}
+      {pendingChange && (
+        <div className="border-t border-orange-200 bg-orange-50 p-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-orange-800 font-medium">
+                LaTeX code modified
+              </span>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleUndoChange}
+                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Undo
+              </button>
+              <button
+                onClick={handleKeepChange}
+                className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+              >
+                Keep
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t border-gray-200 p-1 flex-shrink-0">

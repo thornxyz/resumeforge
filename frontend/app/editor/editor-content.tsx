@@ -6,7 +6,7 @@ import LatexEditor from "@/components/editor";
 import axios from "axios";
 import { toast } from "sonner";
 import Link from "next/link";
-import { User, Resume, EditorContentProps } from "@/lib/types";
+import { User, Resume, EditorContentProps, Message } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,17 @@ export default function EditorContent({
   const [editorWidth, setEditorWidth] = useState<number>(50); // Percentage width
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"code" | "chat">("code");
+
+  // Chat state
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      content:
+        "Hello! I'm your LaTeX resume assistant. I can help you modify your resume through natural language commands. For example:\n\n• 'Add a skills section with JavaScript and React'\n• 'Make the title bigger and bold'\n• 'Add my education from MIT'\n• 'Change the font to Times New Roman'\n\nWhat would you like me to help you with?",
+      role: "assistant",
+      timestamp: new Date(),
+    },
+  ]);
 
   // Load existing PDF if available
   useEffect(() => {
@@ -249,7 +260,13 @@ export default function EditorContent({
                 onChange={(val) => setLatex(val ?? "")}
               />
             ) : (
-              <Chat />
+              <Chat
+                latexContent={latex}
+                onLatexUpdate={setLatex}
+                onCompile={handleCompile}
+                messages={messages}
+                onMessagesUpdate={setMessages}
+              />
             )}
           </div>
         </div>
