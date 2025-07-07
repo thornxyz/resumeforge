@@ -132,6 +132,35 @@ export default function EditorContent({
       const url = URL.createObjectURL(response.data);
       setPdfUrl(url);
       toast.success("LaTeX compiled successfully!");
+
+      // Auto-update saved resume if it exists
+      if (currentResumeId && resumeTitle.trim()) {
+        try {
+          // Create FormData for updating the resume
+          const updateFormData = new FormData();
+          updateFormData.append("resumeId", currentResumeId);
+          updateFormData.append("title", resumeTitle);
+          updateFormData.append("latexContent", latex);
+          updateFormData.append("pdf", response.data, "resume.pdf");
+
+          const updateResponse = await axios.put(
+            "/api/update-resume",
+            updateFormData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+            }
+          );
+
+          if (updateResponse.data.success) {
+            toast.success("Resume automatically updated!");
+          }
+        } catch (updateError) {
+          console.error("Error auto-updating resume:", updateError);
+          // Don't show error toast for auto-update failure, just log it
+        }
+      }
     } catch (error) {
       console.error("Error compiling LaTeX:", error);
       if (axios.isAxiosError(error)) {

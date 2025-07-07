@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Get the model
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Build conversation context from history
         let conversationContext = "";
@@ -49,22 +49,40 @@ USER INSTRUCTION: ${message}
 
 ${conversationContext ? `PREVIOUS CONVERSATION:\n${conversationContext}\n` : ''}
 
-CRITICAL: You MUST respond with ONLY a valid JSON object in this EXACT format. Do not include any other text before or after the JSON:
+CRITICAL REQUIREMENTS:
+1. You MUST actually modify the LaTeX code based on the user's request
+2. You MUST respond with ONLY a valid JSON object in this EXACT format
+3. Do NOT include any explanatory text before or after the JSON
+4. Do NOT just explain what you would do - actually DO the modifications
+5. ALWAYS include the complete modified LaTeX in the "modifiedLatex" field
 
+REQUIRED JSON FORMAT:
 {
   "explanation": "Brief explanation of what you changed",
-  "modifiedLatex": "The complete modified LaTeX code here",
+  "modifiedLatex": "The complete modified LaTeX code with actual changes applied",
   "hasChanges": true
 }
 
-Guidelines:
-- Make precise modifications based on the user's request
-- If no changes are needed, set hasChanges to false and leave modifiedLatex as the original code
-- Always return the complete LaTeX document, not just the changed parts
-- Keep the explanation concise and specific
-- Ensure the JSON is valid and properly escaped
+IMPORTANT: When you make ANY change (even small ones like changing a name), you MUST:
+- Set "hasChanges": true
+- Include the COMPLETE modified LaTeX code in "modifiedLatex"
+- Do NOT set "hasChanges": false unless you truly cannot fulfill the request
 
-RESPOND WITH ONLY THE JSON OBJECT:`;
+EXAMPLES:
+- If user says "make the font bigger", actually change \\fontsize or add \\large commands
+- If user says "add a phone number", actually insert the phone number in the contact section
+- If user says "change the color to blue", actually modify color commands like \\textcolor{blue}
+- If user says "remove education section", actually delete those lines from the code
+
+STRICT GUIDELINES:
+- ALWAYS make the actual requested changes to the LaTeX code
+- Set hasChanges to true when you make modifications
+- Set hasChanges to false ONLY if the request cannot be fulfilled or no changes are truly needed
+- Return the COMPLETE modified LaTeX document, not just snippets
+- Ensure all LaTeX syntax remains valid after modifications
+- Keep explanations brief but specific about what was actually changed
+
+YOU MUST RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:`;
         } else {
             // Regular chat mode
             prompt = `You are an AI assistant specialized in helping with LaTeX resume writing, formatting, and career advice. You should be helpful, professional, and provide practical guidance.
@@ -87,23 +105,74 @@ Please provide a helpful response:`;
                 // Remove any markdown code block formatting
                 cleanedText = cleanedText.replace(/```json\s*/, '').replace(/```\s*$/, '');
 
-                // Try to find JSON object
-                const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const parsedResponse = JSON.parse(jsonMatch[0]);
+                // Try to extract the first valid JSON object
+                const jsonStart = cleanedText.indexOf('{');
+                const jsonEnd = cleanedText.lastIndexOf('}');
+                let jsonString = '';
+                if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+                    jsonString = cleanedText.substring(jsonStart, jsonEnd + 1);
+                }
 
-                    // Validate the response has required fields
-                    if (parsedResponse.explanation && typeof parsedResponse.hasChanges === 'boolean') {
-                        return NextResponse.json({
-                            success: true,
-                            explanation: parsedResponse.explanation,
-                            modifiedLatex: parsedResponse.hasChanges ? parsedResponse.modifiedLatex : null,
-                            response: parsedResponse.explanation
-                        });
+                if (jsonString) {
+                    try {
+                        // Try parsing directly first
+                        const parsedResponse = JSON.parse(jsonString);
+                        console.log("Raw AI response:", parsedResponse);
+                        
+                        if (parsedResponse.explanation) {
+                            // Check if AI actually provided modified code
+                            const hasActualChanges = parsedResponse.modifiedLatex && 
+                                                   parsedResponse.modifiedLatex !== latexContent &&
+                                                   parsedResponse.modifiedLatex.trim() !== latexContent.trim();
+                            
+                            console.log("Change detection:", {
+                                aiSaysHasChanges: parsedResponse.hasChanges,
+                                actuallyHasChanges: hasActualChanges,
+                                explanation: parsedResponse.explanation,
+                                modifiedLatexProvided: !!parsedResponse.modifiedLatex
+                            });
+                            
+                            // Override AI's hasChanges if we detect actual changes
+                            const finalHasChanges = hasActualChanges || parsedResponse.hasChanges === true;
+                            
+                            return NextResponse.json({
+                                success: true,
+                                explanation: parsedResponse.explanation,
+                                modifiedLatex: finalHasChanges ? parsedResponse.modifiedLatex : null,
+                                response: parsedResponse.explanation
+                            });
+                        }
+                    } catch (jsonParseError) {
+                        // Try to fix common issues: unescaped backslashes in string values
+                        try {
+                            // Only escape backslashes that are not already escaped and are inside string values
+                            let safeJson = jsonString.replace(/\\(?![\\"'bnrtfu])/g, "\\\\");
+                            const parsedResponse = JSON.parse(safeJson);
+                            console.log("Sanitized AI response:", parsedResponse);
+                            
+                            if (parsedResponse.explanation) {
+                                // Check if AI actually provided modified code
+                                const hasActualChanges = parsedResponse.modifiedLatex && 
+                                                       parsedResponse.modifiedLatex !== latexContent &&
+                                                       parsedResponse.modifiedLatex.trim() !== latexContent.trim();
+                                
+                                // Override AI's hasChanges if we detect actual changes
+                                const finalHasChanges = hasActualChanges || parsedResponse.hasChanges === true;
+                                
+                                return NextResponse.json({
+                                    success: true,
+                                    explanation: parsedResponse.explanation,
+                                    modifiedLatex: finalHasChanges ? parsedResponse.modifiedLatex : null,
+                                    response: parsedResponse.explanation
+                                });
+                            }
+                        } catch (secondaryError) {
+                            console.log("Failed to parse JSON after sanitization:", jsonString);
+                        }
                     }
                 }
 
-                // If we can't parse as JSON, try to parse as direct JSON
+                // If we can't parse as JSON, try to parse as direct JSON (whole cleanedText)
                 try {
                     const directParse = JSON.parse(cleanedText);
                     return NextResponse.json({
@@ -113,8 +182,7 @@ Please provide a helpful response:`;
                         response: directParse.explanation
                     });
                 } catch (directParseError) {
-                    // Final fallback - treat as regular response
-                    console.log("Failed to parse JSON response:", cleanedText);
+                    console.log("Failed to parse JSON response (direct):", cleanedText);
                     return NextResponse.json({
                         success: true,
                         response: text,
@@ -122,7 +190,7 @@ Please provide a helpful response:`;
                     });
                 }
             } catch (parseError) {
-                console.log("JSON parsing error:", parseError);
+                console.log("JSON parsing error (outer catch):", parseError);
                 // Fallback to regular response if JSON parsing fails
                 return NextResponse.json({
                     success: true,

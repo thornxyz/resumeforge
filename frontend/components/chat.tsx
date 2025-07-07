@@ -89,11 +89,7 @@ function Chat({
 
           // Apply the change immediately for preview
           onLatexUpdate(response.data.modifiedLatex);
-
-          // Auto-compile to show the preview
-          setTimeout(() => {
-            onCompile();
-          }, 500);
+          onCompile(); // Always compile after any code change
         }
       } else {
         throw new Error(response.data.error || "Failed to get response");
@@ -143,6 +139,7 @@ function Chat({
   const handleKeepChange = () => {
     setPendingChange(null);
     toast.success("Changes applied successfully!");
+    onCompile(); // Always compile after keeping changes
   };
 
   const handleUndoChange = () => {
@@ -150,11 +147,59 @@ function Chat({
       onLatexUpdate(pendingChange.originalLatex);
       setPendingChange(null);
       toast.info("Changes reverted");
+      onCompile(); // Always compile after undo
+    }
+  };
 
-      // Recompile with original content
-      setTimeout(() => {
-        onCompile();
-      }, 500);
+  // Retry logic
+  const [retrying, setRetrying] = useState(false);
+  const handleRetry = async () => {
+    if (isLoading || retrying) return;
+    setRetrying(true);
+    // Find the last user message
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((msg) => msg.role === "user");
+    if (!lastUserMessage) {
+      setRetrying(false);
+      return;
+    }
+    try {
+      const response = await axios.post("/api/chat", {
+        message: lastUserMessage.content,
+        conversationHistory: messages.slice(-10),
+        latexContent: latexContent,
+        mode: "agent",
+      });
+      if (response.data.success) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: response.data.explanation || response.data.response,
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        const updatedMessages = [...messages, assistantMessage];
+        onMessagesUpdate(updatedMessages);
+        if (
+          response.data.modifiedLatex &&
+          response.data.modifiedLatex !== latexContent
+        ) {
+          setPendingChange({
+            originalLatex: latexContent,
+            newLatex: response.data.modifiedLatex,
+            explanation:
+              response.data.explanation || "LaTeX code has been modified.",
+          });
+          onLatexUpdate(response.data.modifiedLatex);
+          onCompile(); // Always compile after retry change
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to get response");
+      }
+    } catch (error) {
+      toast.error("Retry failed. Please try again later.");
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -162,7 +207,7 @@ function Chat({
     <div className="flex flex-col h-full bg-white overflow-hidden">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4 min-h-0">
-        {messages.map((message) => (
+        {messages.map((message, idx) => (
           <div
             key={message.id}
             className={`flex ${
@@ -203,6 +248,17 @@ function Chat({
                 <span className="text-xs text-gray-500 mt-1 px-1">
                   {formatTime(message.timestamp)}
                 </span>
+                {/* Retry button: only show for last assistant message */}
+                {idx === messages.length - 1 &&
+                  message.role === "assistant" && (
+                    <button
+                      onClick={handleRetry}
+                      disabled={isLoading || retrying}
+                      className="mt-1 text-xs text-blue-600 underline disabled:text-gray-400"
+                    >
+                      {retrying ? "Retrying..." : "Retry"}
+                    </button>
+                  )}
               </div>
             </div>
           </div>
