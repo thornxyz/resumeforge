@@ -6,6 +6,8 @@ import { BsRobot } from "react-icons/bs";
 import { Message, ChatProps } from "@/lib/types";
 import axios from "axios";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 function Chat({
   latexContent,
@@ -241,9 +243,33 @@ function Chat({
                       : "bg-gray-100 text-gray-900"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                  </p>
+                  {message.role === "assistant" ? (
+                    <div className="text-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-ul:pl-4 prose-ol:pl-4">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          ul: ({ node, ...props }) => (
+                            <ul className="list-disc pl-4 my-2" {...props} />
+                          ),
+                          ol: ({ node, ...props }) => (
+                            <ol className="list-decimal pl-4 my-2" {...props} />
+                          ),
+                          li: ({ node, ...props }) => (
+                            <li className="my-0.5" {...props} />
+                          ),
+                          p: ({ node, ...props }) => (
+                            <p className="my-1" {...props} />
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
                 </div>
                 <span className="text-xs text-gray-500 mt-1 px-1">
                   {formatTime(message.timestamp)}

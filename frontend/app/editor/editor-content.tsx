@@ -50,7 +50,7 @@ export default function EditorContent({
     {
       id: "1",
       content:
-        "Hello! I'm your LaTeX resume assistant. I can help you modify your resume through natural language commands. For example:\n\n• 'Add a skills section with JavaScript and React'\n• 'Make the title bigger and bold'\n• 'Add my education from MIT'\n• 'Change the font to Times New Roman'\n\nWhat would you like me to help you with?",
+        "Hello! I'm your **LaTeX resume assistant**. I can help you modify your resume through natural language commands. For example:\n\n- 'Add a skills section with JavaScript and React'\n- 'Make the title bigger and bold'\n- 'Add my education from MIT'\n- 'Change the font to Times New Roman'\n\nWhat would you like me to help you with?",
       role: "assistant",
       timestamp: new Date(),
     },

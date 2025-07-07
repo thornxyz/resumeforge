@@ -47,8 +47,6 @@ ${latexContent}
 
 USER INSTRUCTION: ${message}
 
-${conversationContext ? `PREVIOUS CONVERSATION:\n${conversationContext}\n` : ''}
-
 CRITICAL REQUIREMENTS:
 1. You MUST actually modify the LaTeX code based on the user's request
 2. You MUST respond with ONLY a valid JSON object in this EXACT format
@@ -118,23 +116,23 @@ Please provide a helpful response:`;
                         // Try parsing directly first
                         const parsedResponse = JSON.parse(jsonString);
                         console.log("Raw AI response:", parsedResponse);
-                        
+
                         if (parsedResponse.explanation) {
                             // Check if AI actually provided modified code
-                            const hasActualChanges = parsedResponse.modifiedLatex && 
-                                                   parsedResponse.modifiedLatex !== latexContent &&
-                                                   parsedResponse.modifiedLatex.trim() !== latexContent.trim();
-                            
+                            const hasActualChanges = parsedResponse.modifiedLatex &&
+                                parsedResponse.modifiedLatex !== latexContent &&
+                                parsedResponse.modifiedLatex.trim() !== latexContent.trim();
+
                             console.log("Change detection:", {
                                 aiSaysHasChanges: parsedResponse.hasChanges,
                                 actuallyHasChanges: hasActualChanges,
                                 explanation: parsedResponse.explanation,
                                 modifiedLatexProvided: !!parsedResponse.modifiedLatex
                             });
-                            
+
                             // Override AI's hasChanges if we detect actual changes
                             const finalHasChanges = hasActualChanges || parsedResponse.hasChanges === true;
-                            
+
                             return NextResponse.json({
                                 success: true,
                                 explanation: parsedResponse.explanation,
@@ -149,16 +147,16 @@ Please provide a helpful response:`;
                             let safeJson = jsonString.replace(/\\(?![\\"'bnrtfu])/g, "\\\\");
                             const parsedResponse = JSON.parse(safeJson);
                             console.log("Sanitized AI response:", parsedResponse);
-                            
+
                             if (parsedResponse.explanation) {
                                 // Check if AI actually provided modified code
-                                const hasActualChanges = parsedResponse.modifiedLatex && 
-                                                       parsedResponse.modifiedLatex !== latexContent &&
-                                                       parsedResponse.modifiedLatex.trim() !== latexContent.trim();
-                                
+                                const hasActualChanges = parsedResponse.modifiedLatex &&
+                                    parsedResponse.modifiedLatex !== latexContent &&
+                                    parsedResponse.modifiedLatex.trim() !== latexContent.trim();
+
                                 // Override AI's hasChanges if we detect actual changes
                                 const finalHasChanges = hasActualChanges || parsedResponse.hasChanges === true;
-                                
+
                                 return NextResponse.json({
                                     success: true,
                                     explanation: parsedResponse.explanation,
