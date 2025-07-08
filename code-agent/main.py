@@ -57,7 +57,6 @@ class AIAgent:
         self.model = genai.GenerativeModel("gemini-2.5-flash")
 
     def build_conversation_context(self, conversation_history: List[Message]) -> str:
-        """Build conversation context from message history."""
         if not conversation_history:
             return ""
 
