@@ -11,8 +11,8 @@ export interface Resume {
     title: string;
     latexContent: string;
     pdfUrl: string | null;
-    createdAt: Date;
-    updatedAt: Date;
+    createdAt: string;
+    updatedAt: string;
 }
 
 // Page props types
@@ -31,7 +31,7 @@ export interface EditorContentProps {
 export interface ChatProps {
     latexContent: string;
     onLatexUpdate: (newLatex: string) => void;
-    onCompile: () => void;
+    onCompile: (latexContent?: string) => void;
     messages: Message[];
     onMessagesUpdate: (messages: Message[]) => void;
 }

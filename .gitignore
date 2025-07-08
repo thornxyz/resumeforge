@@ -44,3 +44,4 @@ node_modules/
 .next/
 frontend/public/uploads
 .venv
+__pycache__

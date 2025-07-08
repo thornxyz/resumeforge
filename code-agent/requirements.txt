@@ -4,3 +4,10 @@ python-multipart
 google-generativeai
 pydantic
 python-dotenv
+langchain
+langchain-google-genai
+langchain-community
+langchain-core
+requests
+aiofiles
+docker

@@ -87,7 +87,12 @@ export async function getUserResumes() {
             }
         });
 
-        return resumes;
+        // Convert dates to ISO strings to avoid hydration mismatches
+        return resumes.map(resume => ({
+            ...resume,
+            createdAt: resume.createdAt.toISOString(),
+            updatedAt: resume.updatedAt.toISOString()
+        }));
     } catch (error) {
         console.error("Error fetching resumes:", error);
         return [];
@@ -111,7 +116,16 @@ export async function getResumeById(id: string) {
             }
         });
 
-        return resume;
+        if (!resume) {
+            return null;
+        }
+
+        // Convert dates to ISO strings to avoid hydration mismatches
+        return {
+            ...resume,
+            createdAt: resume.createdAt.toISOString(),
+            updatedAt: resume.updatedAt.toISOString()
+        };
     } catch (error) {
         console.error("Error fetching resume:", error);
         return null;

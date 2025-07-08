@@ -38,7 +38,12 @@ export default function ResumeCard({ resume }: ResumeCardProps) {
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Updated {new Date(resume.updatedAt).toLocaleDateString()}
+          Updated{" "}
+          {new Date(resume.updatedAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })}
         </p>
 
         <div className="flex flex-wrap gap-2">

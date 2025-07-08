@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
 from dotenv import load_dotenv
+from agent import ResumeForgeAgent, VibeManager
 
 # Load environment variables
 load_dotenv()
@@ -42,6 +43,7 @@ class ChatRequest(BaseModel):
     conversationHistory: List[Message]
     latexContent: Optional[str] = None
     mode: str = "agent"
+    userProfile: Optional[Dict[str, Any]] = None
 
 
 class ChatResponse(BaseModel):
@@ -50,188 +52,14 @@ class ChatResponse(BaseModel):
     modifiedLatex: Optional[str] = None
     response: Optional[str] = None
     error: Optional[str] = None
+    toolsUsed: Optional[List[str]] = None
+    vibeMessage: Optional[str] = None
+    sessionStats: Optional[Dict[str, Any]] = None
 
 
-class AIAgent:
-    def __init__(self):
-        self.model = genai.GenerativeModel("gemini-2.5-flash")
-
-    def build_conversation_context(self, conversation_history: List[Message]) -> str:
-        if not conversation_history:
-            return ""
-
-        return "\n".join(
-            [
-                f"{'User' if msg.role == 'user' else 'Assistant'}: {msg.content}"
-                for msg in conversation_history[-10:]  # Last 10 messages
-            ]
-        )
-
-    def create_agent_prompt(self, message: str, latex_content: str) -> str:
-        return f"""You are a LaTeX code assistant that helps users modify their resume code based on natural language instructions.
-
-CURRENT LATEX CODE:
-```latex
-{latex_content}
-```
-
-USER INSTRUCTION: {message}
-
-CRITICAL REQUIREMENTS:
-1. You MUST actually modify the LaTeX code based on the user's request
-2. You MUST respond with ONLY a valid JSON object in this EXACT format
-3. Do NOT include any explanatory text before or after the JSON
-4. Do NOT just explain what you would do - actually DO the modifications
-5. ALWAYS include the complete modified LaTeX in the "modifiedLatex" field
-
-REQUIRED JSON FORMAT:
-{{
-  "explanation": "Brief explanation of what you changed",
-  "modifiedLatex": "The complete modified LaTeX code with actual changes applied",
-  "hasChanges": true
-}}
-
-IMPORTANT: When you make ANY change (even small ones like changing a name), you MUST:
-- Set "hasChanges": true
-- Include the COMPLETE modified LaTeX code in "modifiedLatex"
-- Do NOT set "hasChanges": false unless you truly cannot fulfill the request
-
-EXAMPLES:
-- If user says "make the font bigger", actually change \\fontsize or add \\large commands
-- If user says "add a phone number", actually insert the phone number in the contact section
-- If user says "change the color to blue", actually modify color commands like \\textcolor{{blue}}
-- If user says "remove education section", actually delete those lines from the code
-
-STRICT GUIDELINES:
-- ALWAYS make the actual requested changes to the LaTeX code
-- Set hasChanges to true when you make modifications
-- Set hasChanges to false ONLY if the request cannot be fulfilled or no changes are truly needed
-- Return the COMPLETE modified LaTeX document, not just snippets
-- Ensure all LaTeX syntax remains valid after modifications
-- Keep explanations brief but specific about what was actually changed
-
-YOU MUST RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:"""
-
-    def create_chat_prompt(self, message: str, conversation_context: str) -> str:
-        prompt = "You are an AI assistant specialized in helping with LaTeX resume writing, formatting, and career advice. You should be helpful, professional, and provide practical guidance.\n\n"
-
-        if conversation_context:
-            prompt += f"Previous conversation:\n{conversation_context}\n\n"
-
-        prompt += (
-            f"Current user message: {message}\n\nPlease provide a helpful response:"
-        )
-        return prompt
-
-    def clean_and_parse_json(self, text: str) -> Optional[Dict[str, Any]]:
-        try:
-            # Clean the response text
-            cleaned_text = text.strip()
-
-            # Remove any markdown code block formatting
-            cleaned_text = re.sub(r"```json\s*", "", cleaned_text)
-            cleaned_text = re.sub(r"```\s*$", "", cleaned_text)
-
-            # Try to extract the first valid JSON object
-            json_start = cleaned_text.find("{")
-            json_end = cleaned_text.rfind("}")
-
-            if json_start != -1 and json_end != -1 and json_end > json_start:
-                json_string = cleaned_text[json_start : json_end + 1]
-
-                try:
-                    # Try parsing directly first
-                    return json.loads(json_string)
-                except json.JSONDecodeError:
-                    # Try to fix common issues: unescaped backslashes
-                    safe_json = re.sub(r'\\(?![\\"\'/bfnrt])', r"\\\\", json_string)
-                    return json.loads(safe_json)
-
-            # If no braces found, try parsing the whole cleaned text
-            return json.loads(cleaned_text)
-
-        except (json.JSONDecodeError, Exception) as e:
-            print(f"JSON parsing error: {e}")
-            return None
-
-    def detect_actual_changes(self, original_latex: str, modified_latex: str) -> bool:
-        if not modified_latex:
-            return False
-        return modified_latex.strip() != original_latex.strip()
-
-    async def process_agent_request(
-        self, message: str, latex_content: str, conversation_history: List[Message]
-    ) -> ChatResponse:
-        try:
-            prompt = self.create_agent_prompt(message, latex_content)
-
-            # Generate response
-            response = self.model.generate_content(prompt)
-            text = response.text
-
-            # Parse JSON response
-            parsed_response = self.clean_and_parse_json(text)
-
-            if parsed_response and "explanation" in parsed_response:
-                # Check if AI actually provided modified code
-                has_actual_changes = self.detect_actual_changes(
-                    latex_content, parsed_response.get("modifiedLatex", "")
-                )
-
-                print(
-                    f"Change detection: AI says {parsed_response.get('hasChanges')}, "
-                    f"Actually has changes: {has_actual_changes}"
-                )
-
-                # Override AI's hasChanges if we detect actual changes
-                final_has_changes = has_actual_changes or parsed_response.get(
-                    "hasChanges", False
-                )
-
-                return ChatResponse(
-                    success=True,
-                    explanation=parsed_response["explanation"],
-                    modifiedLatex=(
-                        parsed_response["modifiedLatex"] if final_has_changes else None
-                    ),
-                    response=parsed_response["explanation"],
-                )
-            else:
-                # Fallback if JSON parsing fails
-                return ChatResponse(
-                    success=True,
-                    response=text,
-                    explanation="I couldn't process that request properly. Please try rephrasing.",
-                )
-
-        except Exception as e:
-            print(f"Agent processing error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to process agent request: {str(e)}"
-            )
-
-    async def process_chat_request(
-        self, message: str, conversation_history: List[Message]
-    ) -> ChatResponse:
-        try:
-            conversation_context = self.build_conversation_context(conversation_history)
-            prompt = self.create_chat_prompt(message, conversation_context)
-
-            # Generate response
-            response = self.model.generate_content(prompt)
-            text = response.text
-
-            return ChatResponse(success=True, response=text)
-
-        except Exception as e:
-            print(f"Chat processing error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to process chat request: {str(e)}"
-            )
-
-
-# Initialize the AI agent
-ai_agent = AIAgent()
+# Initialize the ResumeForge Agent and Vibe Manager
+resume_agent = ResumeForgeAgent(GEMINI_API_KEY)
+vibe_manager = VibeManager()
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -243,15 +71,51 @@ async def chat_endpoint(request: ChatRequest):
                 status_code=400, detail="Message is required and must be a string"
             )
 
-        # Process based on mode
-        if request.mode == "agent" and request.latexContent:
-            return await ai_agent.process_agent_request(
-                request.message, request.latexContent, request.conversationHistory
-            )
-        else:
-            return await ai_agent.process_chat_request(
-                request.message, request.conversationHistory
-            )
+        # Set user profile if provided
+        if request.userProfile:
+            resume_agent.set_user_profile(request.userProfile)
+
+        # Set current LaTeX content if provided
+        if request.latexContent:
+            resume_agent.set_current_latex(request.latexContent)
+
+        # Convert conversation history to the format expected by the agent
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.conversationHistory
+        ]
+
+        # Process the message using the LangChain agent
+        result = await resume_agent.process_message(
+            request.message, conversation_history
+        )
+
+        # Determine vibe message based on tools used and success
+        vibe_message = None
+        if result.get("success"):
+            tools_used = result.get("toolsUsed", [])
+            if "latex_compiler" in tools_used:
+                vibe_message = vibe_manager.get_encouragement("successful_compile")
+                vibe_manager.update_stats("compilation", True)
+            elif "latex_enhancer" in tools_used:
+                vibe_message = vibe_manager.get_encouragement("enhancement")
+                vibe_manager.update_stats("enhancement")
+            elif "latex_template_generator" in tools_used:
+                vibe_message = vibe_manager.get_encouragement("first_template")
+            elif result.get("modifiedLatex"):
+                vibe_message = vibe_manager.get_encouragement("formatting")
+                vibe_manager.update_stats("section_modification")
+
+        return ChatResponse(
+            success=result.get("success", True),
+            response=result.get("response"),
+            explanation=result.get("explanation"),
+            modifiedLatex=result.get("modifiedLatex"),
+            error=result.get("error"),
+            toolsUsed=result.get("toolsUsed"),
+            vibeMessage=vibe_message,
+            sessionStats=vibe_manager.session_stats,
+        )
 
     except HTTPException:
         raise
@@ -263,6 +127,104 @@ async def chat_endpoint(request: ChatRequest):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "ResumeForge AI Agent is running"}
+
+
+@app.post("/reset-session")
+async def reset_session():
+    """Reset the conversation and session state"""
+    try:
+        resume_agent.reset_conversation()
+        global vibe_manager
+        vibe_manager = VibeManager()
+        return {"success": True, "message": "Session reset successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to reset session: {str(e)}"
+        )
+
+
+@app.get("/session-stats")
+async def get_session_stats():
+    """Get current session statistics"""
+    return {
+        "stats": vibe_manager.session_stats,
+        "summary": vibe_manager.get_session_summary(),
+    }
+
+
+@app.post("/compile-latex")
+async def compile_latex_endpoint(request: dict):
+    """Direct endpoint for LaTeX compilation"""
+    try:
+        latex_content = request.get("latexContent")
+        if not latex_content:
+            raise HTTPException(status_code=400, detail="latexContent is required")
+
+        from tools import LatexCompilerTool
+
+        compiler = LatexCompilerTool()
+        result = compiler._run(latex_content)
+
+        success = "compiled successfully" in result.lower()
+        if success:
+            vibe_manager.update_stats("compilation", True)
+
+        return {
+            "success": success,
+            "message": result,
+            "vibeMessage": vibe_manager.get_encouragement(
+                "successful_compile" if success else "error_fix"
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Compilation failed: {str(e)}")
+
+
+@app.post("/validate-latex")
+async def validate_latex_endpoint(request: dict):
+    """Direct endpoint for LaTeX validation"""
+    try:
+        latex_content = request.get("latexContent")
+        if not latex_content:
+            raise HTTPException(status_code=400, detail="latexContent is required")
+
+        from tools import LatexValidatorTool
+
+        validator = LatexValidatorTool()
+        result = validator._run(latex_content)
+
+        return {
+            "success": True,
+            "validation": result,
+            "isValid": "looks good" in result.lower(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+
+@app.post("/generate-template")
+async def generate_template_endpoint(request: dict):
+    """Direct endpoint for template generation"""
+    try:
+        style = request.get("style", "modern")
+        name = request.get("name", "[Your Name]")
+        email = request.get("email", "[your.email@example.com]")
+
+        from tools import LatexTemplateGeneratorTool
+
+        generator = LatexTemplateGeneratorTool()
+        result = generator._run(style, name, email)
+
+        return {
+            "success": True,
+            "template": result,
+            "style": style,
+            "vibeMessage": vibe_manager.get_encouragement("first_template"),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Template generation failed: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

@@ -111,10 +111,11 @@ export default function EditorContent({
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const handleCompile = async () => {
+  const handleCompile = async (latexContent?: string) => {
+    const contentToCompile = latexContent || latex;
     try {
       // Create a blob from the LaTeX content
-      const latexBlob = new Blob([latex], { type: "text/plain" });
+      const latexBlob = new Blob([contentToCompile], { type: "text/plain" });
 
       // Create FormData to send the file
       const formData = new FormData();
@@ -140,7 +141,7 @@ export default function EditorContent({
           const updateFormData = new FormData();
           updateFormData.append("resumeId", currentResumeId);
           updateFormData.append("title", resumeTitle);
-          updateFormData.append("latexContent", latex);
+          updateFormData.append("latexContent", contentToCompile);
           updateFormData.append("pdf", response.data, "resume.pdf");
 
           const updateResponse = await axios.put(
@@ -325,7 +326,7 @@ export default function EditorContent({
             </Link>
             <div className="flex flex-wrap gap-1 sm:gap-2 items-center">
               <button
-                onClick={handleCompile}
+                onClick={() => handleCompile()}
                 className="bg-blue-500 px-2 sm:px-3 py-1 text-white text-xs sm:text-sm rounded hover:bg-blue-600 flex-shrink-0"
               >
                 <span className="hidden sm:inline">Compile</span>
