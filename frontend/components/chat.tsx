@@ -60,10 +60,19 @@ function Chat({
         mode: "agent",
       });
 
-      if (response.data.success) {
+      console.log("API Response:", response.data); // Debug log
+
+      if (response.data) {
+        // Always try to get a response, regardless of success status
+        const assistantContent =
+          response.data.explanation ||
+          response.data.response ||
+          response.data.error ||
+          "I apologize, but I couldn't generate a proper response.";
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: response.data.explanation || response.data.response,
+          content: assistantContent,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -72,8 +81,9 @@ function Chat({
         const updatedMessages = [...messages, userMessage, assistantMessage];
         onMessagesUpdate(updatedMessages);
 
-        // If the AI returned modified LaTeX code, apply it directly and compile
+        // If the AI returned modified LaTeX code and the operation was successful, apply it
         if (
+          response.data.success &&
           response.data.modifiedLatex &&
           response.data.modifiedLatex !== latexContent
         ) {
@@ -84,9 +94,15 @@ function Chat({
           onCompile(response.data.modifiedLatex);
 
           toast.success("Code updated and compiled successfully!");
+        } else if (response.data.modifiedLatex && !response.data.success) {
+          // If there's modified LaTeX but operation failed, still update but don't compile
+          onLatexUpdate(response.data.modifiedLatex);
+          toast.info(
+            "LaTeX code updated, but there may be issues. Check the response for details."
+          );
         }
       } else {
-        throw new Error(response.data.error || "Failed to get response");
+        throw new Error("No response data received from AI");
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -150,10 +166,18 @@ function Chat({
         latexContent: latexContent,
         mode: "agent",
       });
-      if (response.data.success) {
+
+      console.log("Retry API Response:", response.data); // Debug log
+
+      if (response.data && response.data.success) {
+        const assistantContent =
+          response.data.explanation ||
+          response.data.response ||
+          "I apologize, but I couldn't generate a proper response.";
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: response.data.explanation || response.data.response,
+          content: assistantContent,
           role: "assistant",
           timestamp: new Date(),
         };
@@ -172,9 +196,10 @@ function Chat({
           toast.success("Code updated and compiled successfully!");
         }
       } else {
-        throw new Error(response.data.error || "Failed to get response");
+        throw new Error(response.data?.error || "Failed to get response");
       }
     } catch (error) {
+      console.error("Retry error:", error);
       toast.error("Retry failed. Please try again later.");
     } finally {
       setRetrying(false);

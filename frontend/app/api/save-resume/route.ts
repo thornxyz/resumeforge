@@ -29,9 +29,14 @@ export async function POST(req: NextRequest) {
             // Directory might already exist
         }
 
-        // Generate unique filename
+        // Generate filename based on resume title for better organization
+        const sanitizedTitle = title.toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+            .replace(/\s+/g, '-') // Replace spaces with hyphens
+            .substring(0, 50); // Limit length
+
         const timestamp = Date.now();
-        const fileName = `resume_${timestamp}.pdf`;
+        const fileName = `${sanitizedTitle}_${timestamp}.pdf`;
         const filePath = path.join(uploadsDir, fileName);
 
         // Save PDF file
