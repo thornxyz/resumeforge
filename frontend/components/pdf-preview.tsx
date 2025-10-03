@@ -8,8 +8,6 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { PdfPreviewProps } from "@/lib/types";
 import { IoDocumentTextOutline } from "react-icons/io5";
 
-import type { PDFDocumentProxy } from "pdfjs-dist";
-
 // Move worker initialization inside useEffect to handle fast refresh
 const resizeObserverOptions = {};
 const maxWidth = 800;
@@ -48,7 +46,9 @@ export default function PdfPreview({ pdfUrl, zoom = 100 }: PdfPreviewProps) {
 
   function onDocumentLoadSuccess({
     numPages: nextNumPages,
-  }: PDFDocumentProxy): void {
+  }: {
+    numPages: number;
+  }): void {
     setNumPages(nextNumPages);
   }
 

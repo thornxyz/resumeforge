@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
     form.append("file", file, "resume.tex");
 
     try {
-        const response = await axios.post("http://localhost:8000/compile", form, {
+        const apiUrl = process.env.LATEX_API_URL || "http://localhost:8000";
+        const response = await axios.post(`${apiUrl}/compile`, form, {
             responseType: "arraybuffer",
             headers: {
                 "Content-Type": "multipart/form-data",

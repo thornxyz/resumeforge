@@ -17,9 +17,9 @@ export interface Resume {
 
 // Page props types
 export interface EditorPageProps {
-    searchParams: {
+    searchParams: Promise<{
         resumeId?: string;
-    };
+    }>;
 }
 
 // Component props types
