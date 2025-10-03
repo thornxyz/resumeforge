@@ -34,13 +34,13 @@ class ResumeForgeAgent:
 
     def _get_system_prompt(self) -> str:
         return """You are **ResumeForge AI** — an expert LaTeX resume crafting assistant that blends technical precision with creative flair.  
-    You deliver a “vibe coding” experience: users feel like they’re collaborating with an enthusiastic mentor who’s deeply invested in making their resume shine.
+    You deliver a "vibe coding" experience: users feel like they're collaborating with an enthusiastic mentor who's deeply invested in making their resume shine.
 
     ## PERSONALITY
     - Warm, encouraging, and confident — a mix of skilled coding mentor and supportive career coach.
     - Use emojis sparingly but meaningfully 🎯✨🔥 to add energy and celebration to progress.
     - Keep a conversational, human tone while staying professional and focused on the goal.
-    - Show excitement for user wins and progress (“Yes! That section looks so much cleaner now 🚀”).
+    - Show excitement for user wins and progress ("Yes! That section looks so much cleaner now 🚀").
     - Give constructive, actionable feedback without being overwhelming.
 
     ## CAPABILITIES
@@ -62,7 +62,21 @@ class ResumeForgeAgent:
     6. **Deliver Improvements** — Present clean, functional LaTeX code plus clear explanations.
     7. **Encourage & Guide** — Celebrate progress, suggest next steps, and keep morale high.
 
-    Always return LaTeX code in a **complete, working form** unless the user specifically asks for only a snippet.
+    ## CRITICAL RULE FOR LATEX OUTPUT
+    **ALWAYS return the COMPLETE document** when providing LaTeX code in your response.
+    - If the user asks to modify a section (e.g., "update my experience section"), you MUST return the ENTIRE document with that section changed.
+    - NEVER return only the modified section by itself.
+    - NEVER replace the entire document with just a snippet.
+    - The LaTeX code block should include everything from \\documentclass to \\end{document}.
+    - Make the requested changes within the full context of the existing resume.
+    
+    Example of CORRECT behavior:
+    User: "Add a new skill to my skills section"
+    Your response: [explanation] + ```latex [FULL DOCUMENT with skills section updated] ```
+    
+    Example of INCORRECT behavior:
+    User: "Add a new skill to my skills section"
+    Your response: ```latex \\section{Skills}\nPython, JavaScript, Docker``` (This is WRONG - missing the rest of the document!)
     """
 
     def _extract_latex_from_message(self, message: str) -> Optional[str]:
@@ -292,7 +306,7 @@ class ResumeForgeAgent:
         return results
 
     def _create_comprehensive_prompt(
-        self, message: str, tool_results: Dict[str, str]
+        self, message: str, tool_results: Dict[str, str], intent_action: str = "chat"
     ) -> str:
         prompt = f"{self._get_system_prompt()}\n\n"
         if self.current_latex:
@@ -308,6 +322,17 @@ class ResumeForgeAgent:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 prompt += f"{role}: {msg['content']}\n"
             prompt += "\n"
+
+        # Add extra emphasis for modification requests
+        if intent_action in ["modify", "enhance", "format"] and self.current_latex:
+            prompt += """
+⚠️ IMPORTANT MODIFICATION INSTRUCTION:
+The user is asking to modify the existing resume above. You MUST return the COMPLETE document with the changes applied.
+DO NOT return just the modified section. DO NOT return a snippet.
+Include the entire document from \\documentclass to \\end{document} with the user's requested changes integrated.
+
+"""
+
         prompt += (
             f"USER MESSAGE: {message}\n\n"
             "Please respond with helpful guidance. Include LaTeX in a ```latex block if changed."
@@ -332,7 +357,9 @@ class ResumeForgeAgent:
                 for key in intent["tools_needed"]:
                     if key in self.tools:
                         tools_used.append(self.tools[key].name)
-            prompt = self._create_comprehensive_prompt(message, tool_results)
+            prompt = self._create_comprehensive_prompt(
+                message, tool_results, intent["action"]
+            )
             try:
                 response = self.model.generate_content(prompt)
                 response_text = getattr(response, "text", str(response))
@@ -382,7 +409,24 @@ class ResumeForgeAgent:
     def _extract_latex_from_response(self, response: str) -> Optional[str]:
         pattern = r"```(?:latex|tex)?\s*\n(.*?)\n```"
         m = re.search(pattern, response, re.DOTALL)
-        return m.group(1).strip() if m else None
+        extracted = m.group(1).strip() if m else None
+
+        # Validate that we got a complete document, not just a snippet
+        if extracted:
+            has_docclass = "\\documentclass" in extracted
+            has_begin_doc = "\\begin{document}" in extracted
+            has_end_doc = "\\end{document}" in extracted
+
+            # If it looks like a snippet (missing key components), try to merge with current
+            if not (has_docclass and has_begin_doc and has_end_doc):
+                # Check if it's just a section that should be merged
+                if self.current_latex and re.search(r"\\section", extracted):
+                    # This appears to be a partial section edit
+                    # Don't replace the entire document - this is likely an error
+                    # Return None to prevent replacement
+                    return None
+
+        return extracted
 
     def _extract_explanation(self, response: str) -> Optional[str]:
         lines = []

@@ -1,15 +1,26 @@
 "use client";
 
+import { useMemo } from "react";
 import { deleteResume } from "@/lib/actions";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Resume, ResumeCardProps } from "@/lib/types";
+import { ResumeCardProps } from "@/lib/types";
 import { MdDelete } from "react-icons/md";
 import { FiEdit } from "react-icons/fi";
 import { LuEye } from "react-icons/lu";
 import { IoMdDownload } from "react-icons/io";
 
 export default function ResumeCard({ resume }: ResumeCardProps) {
+  const formattedDate = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(resume.updatedAt)),
+    [resume.updatedAt]
+  );
   const handleDelete = async () => {
     if (confirm("Are you sure you want to delete this resume?")) {
       try {
@@ -36,14 +47,8 @@ export default function ResumeCard({ resume }: ResumeCardProps) {
             <MdDelete size={22} />
           </button>
         </div>
-
-        <p className="text-sm text-gray-600 mb-4">
-          Updated{" "}
-          {new Date(resume.updatedAt).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })}
+        <p className="text-sm text-gray-600 mb-4" suppressHydrationWarning>
+          Updated {formattedDate}
         </p>
 
         <div className="flex flex-wrap gap-2">
