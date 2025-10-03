@@ -1,28 +1,21 @@
-"""LaTeX tools"""
+"""LaTeX tools for resume building"""
 
 import re
 import requests
 from typing import List
 
 
-class BaseTool:
-    name = "base_tool"
-    description = "Base tool"
-
-    def _run(self, *args, **kwargs):
-        raise NotImplementedError
-
-    async def _arun(self, *args, **kwargs):
-        return self._run(*args, **kwargs)
-
-
-class LatexCompilerTool(BaseTool):
+class LatexCompilerTool:
+    """Compile LaTeX to PDF via local service"""
+    
     name = "latex_compiler"
     description = "Compile LaTeX to PDF via local service"
 
     def _run(self, latex_content: str) -> str:
+        """Compile LaTeX content to PDF"""
         if "\\documentclass" not in latex_content:
             return "❌ Compilation failed: Missing \\documentclass"
+        
         try:
             r = requests.post(
                 "http://localhost:8000/compile",
@@ -31,73 +24,93 @@ class LatexCompilerTool(BaseTool):
             )
         except requests.exceptions.RequestException as e:
             return f"❌ Failed to connect to LaTeX compiler: {e}"
+        
         if r.status_code == 200:
             return "✅ LaTeX compiled successfully! PDF generated."
+        
         try:
             err = r.json().get("error")
         except Exception:
             err = r.text[:500]
         return f"❌ Compilation failed: {err}"
 
-    async def _arun(self, latex_content: str) -> str:
-        return self._run(latex_content)
 
-
-class LatexValidatorTool(BaseTool):
+class LatexValidatorTool:
+    """Validate LaTeX and report issues"""
+    
     name = "latex_validator"
     description = "Validate LaTeX and report issues + JSON tail"
 
     def _run(self, latex_content: str) -> str:
+        """Validate LaTeX content and return report"""
         errors: List[str] = []
         warnings: List[str] = []
         fixes: List[str] = []
-        if not re.search(r"\\\\\s*documentclass", latex_content):
+        
+        # Check for document structure
+        if not re.search(r"\\documentclass", latex_content):
             errors.append("Missing \\documentclass")
             fixes.append("Add minimal preamble")
+        
         if not re.search(r"\\begin{document}", latex_content):
             errors.append("Missing \\begin{document}")
             fixes.append("Add \\begin{document}")
+        
         if not re.search(r"\\end{document}", latex_content):
             errors.append("Missing \\end{document}")
             fixes.append("Add \\end{document}")
+        
+        # Check for balanced braces
         if latex_content.count("{") != latex_content.count("}"):
             errors.append("Unbalanced braces")
             fixes.append("Balance braces")
+        
+        # Check for unclosed environments
         for env in re.findall(r"\\begin{(\w+)}", latex_content):
             if not re.search(rf"\\end{{{env}}}", latex_content):
                 errors.append(f"Unclosed environment: {env}")
                 fixes.append(f"Add \\end{{{env}}}")
-        if re.search(r"\\(?:textcolor|color)\\b", latex_content) and not re.search(
+        
+        # Check for missing packages
+        if re.search(r"\\(?:textcolor|color)\b", latex_content) and not re.search(
             r"\\usepackage{.*?xcolor.*?}", latex_content
         ):
             warnings.append("Color commands without xcolor")
             fixes.append("Add \\usepackage{xcolor}")
-        if re.search(r"\\(?:href|url)\\b", latex_content) and not re.search(
+        
+        if re.search(r"\\(?:href|url)\b", latex_content) and not re.search(
             r"\\usepackage{.*?hyperref.*?}", latex_content
         ):
             warnings.append("Hyperlink commands without hyperref")
             fixes.append("Add \\usepackage{hyperref}")
-        if not any(
-            s
-            in [
-                s2.lower() for s2 in re.findall(r"\\section\*?{([^}]+)}", latex_content)
-            ]
-            for s in ["experience", "education", "skills"]
-        ):
+        
+        # Check for resume sections
+        sections = [
+            s.lower() 
+            for s in re.findall(r"\\section\*?{([^}]+)}", latex_content)
+        ]
+        if not any(s in sections for s in ["experience", "education", "skills"]):
             warnings.append("No standard resume sections")
             fixes.append("Add Experience/Education/Skills")
+        
+        # Build output
         out: List[str] = []
         if errors:
             out.append("🔴 Errors:")
             out.extend("  - " + e for e in errors)
+        
         if warnings:
             out.append("🟡 Warnings:")
             out.extend("  - " + w for w in warnings)
+        
         if fixes:
             out.append("🛠 Suggested fixes:")
             out.extend("  - " + f for f in fixes)
+        
         if not errors and not warnings:
             out.append("✅ LaTeX syntax looks good!")
+        
+        # Add JSON validation result
         out.append(
             "__VALIDATION_JSON__"
             + str(
@@ -109,17 +122,18 @@ class LatexValidatorTool(BaseTool):
                 }
             )
         )
+        
         return "\n".join(out)
 
-    async def _arun(self, latex_content: str) -> str:
-        return self._run(latex_content)
 
-
-class LatexSectionExtractorTool(BaseTool):
+class LatexSectionExtractorTool:
+    """Extract sections from LaTeX documents"""
+    
     name = "latex_section_extractor"
     description = "Extract a named section"
 
     def _run(self, latex_content: str, section_name: str = "") -> str:
+        """Extract a specific section or list all sections"""
         if not section_name:
             secs = re.findall(r"\\section\*?{([^}]+)}", latex_content)
             return (
@@ -127,38 +141,39 @@ class LatexSectionExtractorTool(BaseTool):
                 if secs
                 else "No sections found."
             )
+        
         pattern = rf"\\section\*?{{{re.escape(section_name)}}}(.*?)(?=\\section|\\end{{document}}|\Z)"
         m = re.search(pattern, latex_content, re.DOTALL | re.IGNORECASE)
+        
         return (
             f"Section '{section_name}':\n{m.group(1).strip()}"
             if m
             else f"Section '{section_name}' not found."
         )
 
-    async def _arun(self, latex_content: str, section_name: str = "") -> str:
-        return self._run(latex_content, section_name)
 
-
-class LatexTemplateGeneratorTool(BaseTool):
+class LatexTemplateGeneratorTool:
+    """Generate resume templates in various styles"""
+    
     name = "latex_template_generator"
     description = "Generate resume template"
 
-    def _run(
-        self,
-        style: str = "modern",
-        name: str = "[Your Name]",
-        email: str = "[your.email@example.com]",
-    ) -> str:
+    def _run(self, style: str = "modern") -> str:
+        """Generate a resume template based on the specified style"""
         style = style.lower().strip()
-        t = {
+        
+        templates = {
             "modern": self._modern_template,
             "classic": self._classic_template,
             "creative": self._creative_template,
             "academic": self._academic_template,
         }
-        return (t.get(style) or self._modern_template)(name, email)
+        
+        template_func = templates.get(style, self._modern_template)
+        return template_func()
 
     def _common_preamble(self) -> str:
+        """Return common LaTeX preamble used by all templates"""
         return (
             "\\documentclass[11pt]{article}\n"
             "\\usepackage[margin=0.8in]{geometry}\n"
@@ -173,80 +188,212 @@ class LatexTemplateGeneratorTool(BaseTool):
             "\\pagestyle{empty}\n"
         )
 
-    def _modern_template(self, name: str, email: str) -> str:
-        return f"""{self._common_preamble()}\\begin{{document}}\n\\begin{{center}}\n{{\\LARGE {name}}}\\\\\n{{\\normalsize {email} • LinkedIn • GitHub}}\\\\\n\\end{{center}}\n\\section{{Summary}}\nResults-oriented engineer focused on scalable web applications.\n\\section{{Experience}}\\textbf{{Software Engineer}}, Tech Company (2024--Present)\\\\\n\\begin{{itemize}}\n  \\item Built full-stack features (TypeScript/Python).\n  \\item Reduced API latency 30\\%.\n  \\item Shipped UX improvements cross-team.\n\\end{{itemize}}\n\\section{{Education}}B.S. Computer Science, University (2020--2024) -- GPA 3.8/4.0\n\\section{{Skills}}Languages: Python, JS, TS, SQL\\\\Frameworks: React, Next.js, FastAPI\\\\Tools: Git, Docker, PostgreSQL, AWS\n\\end{{document}}"""
+    def _modern_template(self) -> str:
+        """Generate modern template"""
+        return f"""{self._common_preamble()}\\begin{{document}}
+\\begin{{center}}
+{{\\LARGE [Your Name]}}\\\\
+{{\\normalsize [your.email@example.com] • LinkedIn • GitHub}}\\\\
+\\end{{center}}
 
-    def _classic_template(self, name: str, email: str) -> str:
-        return f"""{self._common_preamble()}\\begin{{document}}\n\\begin{{center}}\n{{\\Large {name}}}\\\\\n{{{email} • Location • +1 (555) 123-4567}}\\\\\n\\end{{center}}\n\\section{{Objective}}Seeking a software engineering role contributing reliable systems.\n\\section{{Experience}}\\textbf{{Junior Developer}}, Company A (2023--2024)\\\\\n\\begin{{itemize}}\n  \\item Built internal productivity tools.\n  \\item Raised test coverage to 85\\%.\n\\end{{itemize}}\n\\section{{Education}}University — B.S. CS (2020--2024)\\\\Coursework: Data Structures, Algorithms, DBs\n\\section{{Skills}}Programming: Python, JS, SQL\\\\Other: Git, Docker, Linux\n\\end{{document}}"""
+\\section{{Summary}}
+Results-oriented engineer focused on scalable web applications.
 
-    def _creative_template(self, name: str, email: str) -> str:
-        return f"""{self._common_preamble()}\\definecolor{{accent}}{{HTML}}{{005F99}}\n\\begin{{document}}\n\\begin{{center}}\n{{\\fontsize{{24}}{{26}}\\selectfont\\textcolor{{accent}}{{{name}}}}}\\\\\n{{\\small {email} • Portfolio • @handle}}\\\\\n\\end{{center}}\n\\section{{Profile}}Creative full-stack engineer blending design + engineering.\n\\section{{Projects}}\\textbf{{Project Alpha}} Dashboard analytics\\\\\\n\\begin{{itemize}}\n  \\item Modular React component system.\n  \\item Real-time websocket updates.\n\\end{{itemize}}\\textbf{{Project Beta}} Automation scripts reduced ops 40\\%.\n\\section{{Skills}}Frontend: React, Next.js, Tailwind\\\\Backend: FastAPI, Node.js, PostgreSQL\\\\Other: Docker, CI/CD, Testing\n\\section{{Experience}}Freelance Developer (2022--Present)\\\\\\n\\begin{{itemize}}\n  \\item Delivered accessible performant web apps.\n\\end{{itemize}}\n\\end{{document}}"""
+\\section{{Experience}}
+\\textbf{{Software Engineer}}, Tech Company (2024--Present)\\\\
+\\begin{{itemize}}
+  \\item Built full-stack features (TypeScript/Python).
+  \\item Reduced API latency 30\\%.
+  \\item Shipped UX improvements cross-team.
+\\end{{itemize}}
 
-    def _academic_template(self, name: str, email: str) -> str:
-        return f"""{self._common_preamble()}\\begin{{document}}\n\\begin{{center}}\n{{\\Large {name}}}\\\\\n{{{email} • Google Scholar}}\\\\\n\\end{{center}}\n\\section{{Research Interests}}Distributed systems, applied ML, performance.\n\\section{{Publications}}\\begin{{itemize}}\n  \\item Author et al. "Paper Title", Conf 2024.\n  \\item Author et al. "Another Publication", Journal 2023.\n\\end{{itemize}}\n\\section{{Education}}B.S. CS, University, 2024\n\\section{{Experience}}Research Assistant (2023--2024)\\\\\\n\\begin{{itemize}}\n  \\item Built evaluation framework for schedulers.\n\\end{{itemize}}\n\\section{{Skills}}Languages: Python, C++, Go\\\\Tools: Git, Docker, Linux, LaTeX\n\\end{{document}}"""
+\\section{{Education}}
+B.S. Computer Science, University (2020--2024) -- GPA 3.8/4.0
 
-    async def _arun(
-        self,
-        style: str = "modern",
-        name: str = "[Your Name]",
-        email: str = "[your.email@example.com]",
-    ) -> str:
-        return self._run(style, name, email)
+\\section{{Skills}}
+Languages: Python, JS, TS, SQL\\\\
+Frameworks: React, Next.js, FastAPI\\\\
+Tools: Git, Docker, PostgreSQL, AWS
+
+\\end{{document}}"""
+
+    def _classic_template(self) -> str:
+        """Generate classic template"""
+        return f"""{self._common_preamble()}\\begin{{document}}
+\\begin{{center}}
+{{\\Large [Your Name]}}\\\\
+{{[your.email@example.com] • Location • +1 (555) 123-4567}}\\\\
+\\end{{center}}
+
+\\section{{Objective}}
+Seeking a software engineering role contributing reliable systems.
+
+\\section{{Experience}}
+\\textbf{{Junior Developer}}, Company A (2023--2024)\\\\
+\\begin{{itemize}}
+  \\item Built internal productivity tools.
+  \\item Raised test coverage to 85\\%.
+\\end{{itemize}}
+
+\\section{{Education}}
+University — B.S. CS (2020--2024)\\\\
+Coursework: Data Structures, Algorithms, DBs
+
+\\section{{Skills}}
+Programming: Python, JS, SQL\\\\
+Other: Git, Docker, Linux
+
+\\end{{document}}"""
+
+    def _creative_template(self) -> str:
+        """Generate creative template"""
+        return f"""{self._common_preamble()}\\definecolor{{accent}}{{HTML}}{{005F99}}
+
+\\begin{{document}}
+\\begin{{center}}
+{{\\fontsize{{24}}{{26}}\\selectfont\\textcolor{{accent}}{{[Your Name]}}}}\\\\
+{{\\small [your.email@example.com] • Portfolio • @handle}}\\\\
+\\end{{center}}
+
+\\section{{Profile}}
+Creative full-stack engineer blending design + engineering.
+
+\\section{{Projects}}
+\\textbf{{Project Alpha}} Dashboard analytics\\\\
+\\begin{{itemize}}
+  \\item Modular React component system.
+  \\item Real-time websocket updates.
+\\end{{itemize}}
+
+\\textbf{{Project Beta}} Automation scripts reduced ops 40\\%.
+
+\\section{{Skills}}
+Frontend: React, Next.js, Tailwind\\\\
+Backend: FastAPI, Node.js, PostgreSQL\\\\
+Other: Docker, CI/CD, Testing
+
+\\section{{Experience}}
+Freelance Developer (2022--Present)\\\\
+\\begin{{itemize}}
+  \\item Delivered accessible performant web apps.
+\\end{{itemize}}
+
+\\end{{document}}"""
+
+    def _academic_template(self) -> str:
+        """Generate academic template"""
+        return f"""{self._common_preamble()}\\begin{{document}}
+\\begin{{center}}
+{{\\Large [Your Name]}}\\\\
+{{[your.email@example.com] • Google Scholar}}\\\\
+\\end{{center}}
+
+\\section{{Research Interests}}
+Distributed systems, applied ML, performance.
+
+\\section{{Publications}}
+\\begin{{itemize}}
+  \\item Author et al. "Paper Title", Conf 2024.
+  \\item Author et al. "Another Publication", Journal 2023.
+\\end{{itemize}}
+
+\\section{{Education}}
+B.S. CS, University, 2024
+
+\\section{{Experience}}
+Research Assistant (2023--2024)\\\\
+\\begin{{itemize}}
+  \\item Built evaluation framework for schedulers.
+\\end{{itemize}}
+
+\\section{{Skills}}
+Languages: Python, C++, Go\\\\
+Tools: Git, Docker, Linux, LaTeX
+
+\\end{{document}}"""
 
 
-class LatexEnhancerTool(BaseTool):
+class LatexEnhancerTool:
+    """Enhance LaTeX content"""
+    
     name = "latex_enhancer"
     description = "Enhance LaTeX content"
 
-    def _run(self, latex_content: str, enhancement_type: str = "all") -> str:
+    def _run(self, latex_content: str) -> str:
+        """Enhance LaTeX content by converting plain lists to itemize"""
         if not latex_content.strip():
             return "No LaTeX content supplied."
+        
         suggestions: List[str] = []
         lines = latex_content.splitlines()
         out: List[str] = []
         inside = False
+        
         for line in lines:
             s = line.strip()
+            
+            # Detect start of plain list
             if re.match(r"^- ", s) and not inside:
                 out.append("\\begin{itemize}")
                 inside = True
+            
+            # Detect end of plain list
             if inside and s == "":
                 out.append("\\end{itemize}")
                 inside = False
+            
+            # Convert list item
             if inside and re.match(r"^- ", s):
-                bullet = re.sub(r"^(- )", "", s)
+                bullet = re.sub(r"^- ", "", s)
                 bullet = re.sub(r"^(\w)", lambda m: m.group(1).upper(), bullet)
                 suggestions.append(f"Converted list item: {bullet[:40]}")
                 out.append(f"  \\item {bullet}")
             else:
                 out.append(line)
+        
+        # Close any remaining itemize
         if inside:
             out.append("\\end{itemize}")
+        
         improved = "\n".join(out)
-        if re.search(r"\\item", improved) and "%" not in improved:
+        
+        # Check for quantifiable metrics
+        if re.search(r"\\item", improved) and not re.search(r"\d+%", improved):
             suggestions.append("Add quantifiable impact numbers to bullets.")
+        
+        # Build report
         report = ["Enhancements:"] + [
-            "  - " + s for s in suggestions or ["Already structured."]
+            "  - " + s for s in (suggestions or ["Already structured."])
         ]
         report.append("\nImproved LaTeX:\n" + improved)
+        
         return "\n".join(report)
 
-    async def _arun(self, latex_content: str, enhancement_type: str = "all") -> str:
-        return self._run(latex_content, enhancement_type)
 
-
-class LatexFormatterTool(BaseTool):
+class LatexFormatterTool:
+    """Format and normalize LaTeX"""
+    
     name = "latex_formatter"
     description = "Format / normalize LaTeX"
 
     def _run(self, latex_content: str) -> str:
+        """Format and normalize LaTeX content"""
         if not latex_content.strip():
             return "No LaTeX content to format."
+        
+        # Normalize line endings
         c = latex_content.replace("\r\n", "\n").replace("\r", "\n")
+        
+        # Remove trailing whitespace
         c = "\n".join(l.rstrip() for l in c.splitlines())
+        
+        # Normalize blank lines
         c = re.sub(r"\n{3,}", "\n\n", c)
+        
+        # Add spacing before sections
         c = re.sub(r"([^\n])\n(\\section)", r"\1\n\n\\section", c)
 
+        # Indent environments
         def indent_env(m):
             body = m.group(2)
             body_i = "\n".join(
@@ -260,7 +407,5 @@ class LatexFormatterTool(BaseTool):
             c,
             flags=re.DOTALL,
         )
+        
         return "✅ Formatting applied.\n" + c
-
-    async def _arun(self, latex_content: str) -> str:
-        return self._run(latex_content)
