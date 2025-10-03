@@ -100,3 +100,17 @@ pnpm dev
 cd code-agent
 uv run main.py
 ```
+
+## Todo
+
+- **Improve LaTeX code generation**: Enhance the coding agent to validate LaTeX syntax and prevent compilation errors. Add error handling and retry logic for malformed LaTeX output.
+
+- **Integrate Language Server Protocol (LSP)**: Add full LSP support to the Monaco editor for real-time LaTeX syntax checking etc. Consider integrating TexLab or Digestif language server.
+
+- **Resume templates library**: Create a collection of professional resume templates (Modern, ATS-friendly, Academic, Creative) with preview functionality and one-click application.
+
+- **Resume builder agent**: Develop an AI assistant to guide users through building resumes from scratch, including:
+  - Interactive questionnaire for gathering user information
+  - Smart content suggestions based on industry and role
+  - Auto-formatting and section organization
+  - Export to multiple formats (PDF, LaTeX source, Markdown)
