@@ -18,8 +18,16 @@ function Chat({
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<"ask" | "edit">("ask");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const threadIdRef = useRef<string>("");
+  if (!threadIdRef.current) {
+    threadIdRef.current =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -57,18 +65,35 @@ function Chat({
         message: userMessage.content,
         conversationHistory: [...messages, userMessage].slice(-10), // Include the new message
         latexContent: latexContent,
-        mode: "agent",
+        mode,
+        threadId: threadIdRef.current,
       });
 
       console.log("API Response:", response.data); // Debug log
 
       if (response.data) {
         // Always try to get a response, regardless of success status
-        const assistantContent =
+        if (response.data.threadId) {
+          threadIdRef.current = response.data.threadId;
+        }
+
+        if (response.data.mode === "ask" || response.data.mode === "edit") {
+          setMode(response.data.mode);
+        }
+
+        const toolsUsed: string[] = Array.isArray(response.data.toolsUsed)
+          ? response.data.toolsUsed.filter(Boolean)
+          : [];
+
+        let assistantContent =
           response.data.explanation ||
           response.data.response ||
           response.data.error ||
           "I apologize, but I couldn't generate a proper response.";
+
+        if (toolsUsed.length > 0) {
+          assistantContent += `\n\n_Tools used: ${toolsUsed.join(", ")}_`;
+        }
 
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -82,7 +107,11 @@ function Chat({
         onMessagesUpdate(updatedMessages);
 
         // If the AI returned modified LaTeX code and the operation was successful, apply it
+        const isEditFlow =
+          (response.data.mode || mode) === "edit" || mode === "edit";
+
         if (
+          isEditFlow &&
           response.data.success &&
           response.data.modifiedLatex &&
           response.data.modifiedLatex !== latexContent
@@ -100,6 +129,18 @@ function Chat({
           toast.info(
             "LaTeX code updated, but there may be issues. Check the response for details."
           );
+        }
+
+        if (
+          response.data.compilation_result &&
+          response.data.compilation_result.status === "error"
+        ) {
+          const errors = response.data.compilation_result.errors || [];
+          const errorText =
+            Array.isArray(errors) && errors.length > 0
+              ? errors.join("\n")
+              : "Compilation failed";
+          toast.error(errorText);
         }
       } else {
         throw new Error("No response data received from AI");
@@ -164,16 +205,33 @@ function Chat({
         message: lastUserMessage.content,
         conversationHistory: messages.slice(-10),
         latexContent: latexContent,
-        mode: "agent",
+        mode,
+        threadId: threadIdRef.current,
       });
 
       console.log("Retry API Response:", response.data); // Debug log
 
       if (response.data && response.data.success) {
-        const assistantContent =
+        if (response.data.threadId) {
+          threadIdRef.current = response.data.threadId;
+        }
+
+        if (response.data.mode === "ask" || response.data.mode === "edit") {
+          setMode(response.data.mode);
+        }
+
+        const toolsUsed: string[] = Array.isArray(response.data.toolsUsed)
+          ? response.data.toolsUsed.filter(Boolean)
+          : [];
+
+        let assistantContent =
           response.data.explanation ||
           response.data.response ||
           "I apologize, but I couldn't generate a proper response.";
+
+        if (toolsUsed.length > 0) {
+          assistantContent += `\n\n_Tools used: ${toolsUsed.join(", ")}_`;
+        }
 
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -183,7 +241,11 @@ function Chat({
         };
         const updatedMessages = [...messages, assistantMessage];
         onMessagesUpdate(updatedMessages);
+        const isEditFlow =
+          (response.data.mode || mode) === "edit" || mode === "edit";
+
         if (
+          isEditFlow &&
           response.data.modifiedLatex &&
           response.data.modifiedLatex !== latexContent
         ) {
@@ -208,6 +270,36 @@ function Chat({
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
+      <div className="border-b border-gray-200 px-2 py-2 flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">Mode</span>
+        <div className="inline-flex rounded-md shadow-sm" role="group">
+          <button
+            type="button"
+            onClick={() => setMode("ask")}
+            className={`px-3 py-1 text-xs font-medium border border-gray-300 first:rounded-l-md last:rounded-r-md focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              mode === "ask"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+            disabled={isLoading}
+          >
+            Ask
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("edit")}
+            className={`px-3 py-1 text-xs font-medium border border-gray-300 first:rounded-l-md last:rounded-r-md focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              mode === "edit"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+            disabled={isLoading}
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4 min-h-0">
         {messages.map((message, idx) => (
@@ -249,16 +341,16 @@ function Chat({
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          ul: ({ node, ...props }) => (
+                          ul: ({ ...props }) => (
                             <ul className="list-disc pl-4 my-2" {...props} />
                           ),
-                          ol: ({ node, ...props }) => (
+                          ol: ({ ...props }) => (
                             <ol className="list-decimal pl-4 my-2" {...props} />
                           ),
-                          li: ({ node, ...props }) => (
+                          li: ({ ...props }) => (
                             <li className="my-0.5" {...props} />
                           ),
-                          p: ({ node, ...props }) => (
+                          p: ({ ...props }) => (
                             <p className="my-1" {...props} />
                           ),
                         }}

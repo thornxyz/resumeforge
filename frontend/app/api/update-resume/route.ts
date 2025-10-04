@@ -30,7 +30,7 @@ export async function PUT(req: NextRequest) {
             const uploadsDir = path.join(process.cwd(), "public", "uploads");
             try {
                 await mkdir(uploadsDir, { recursive: true });
-            } catch (error) {
+            } catch {
                 // Directory might already exist
             }
 
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest) {
         }
 
         // Update in database
-        const updateData: any = {
+        const updateData: { title: string; latexContent: string; pdfUrl?: string } = {
             title,
             latexContent,
         };

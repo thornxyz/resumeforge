@@ -5,7 +5,8 @@ const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8001';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { message, conversationHistory, latexContent, mode } = body;
+        const { message, conversationHistory, latexContent, mode, threadId } = body;
+        const normalizedMode = mode === 'edit' ? 'edit' : 'ask';
 
         if (!message || typeof message !== 'string') {
             return NextResponse.json(
@@ -25,7 +26,8 @@ export async function POST(request: NextRequest) {
                     message,
                     conversationHistory: conversationHistory || [],
                     latexContent,
-                    mode: mode || 'agent'
+                    mode: normalizedMode,
+                    threadId: typeof threadId === 'string' ? threadId : undefined,
                 }),
             });
 

@@ -5,3 +5,6 @@ google-generativeai
 pydantic
 python-dotenv
 requests
+langgraph
+langchain-google-genai
+langchain-mcp

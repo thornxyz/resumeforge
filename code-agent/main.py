@@ -1,10 +1,15 @@
 import os
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
-from agent import ResumeForgeAgent
+
+from backend.agent import LangGraphResumeAgent
+from backend.config import AgentConfig
+from backend.tools.compiler import compile_latex
+from backend.tools.formatter import format_latex
 
 # Load environment variables
 load_dotenv()
@@ -37,21 +42,30 @@ class ChatRequest(BaseModel):
     message: str
     conversationHistory: List[Message]
     latexContent: Optional[str] = None
-    mode: str = "agent"
+    mode: str = "ask"
+    cursorPosition: Optional[Dict[str, int]] = None
+    filesToModify: Optional[List[str]] = None
     userProfile: Optional[Dict[str, Any]] = None
+    threadId: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
-    success: bool
+    mode: str
+    response: Optional[str] = None
+    edits: Optional[List[Dict[str, Any]]] = None
+    compilation_result: Optional[Dict[str, Any]] = None
+    preview_url: Optional[str] = None
+    success: bool = True
     explanation: Optional[str] = None
     modifiedLatex: Optional[str] = None
-    response: Optional[str] = None
     error: Optional[str] = None
     toolsUsed: Optional[List[str]] = None
+    threadId: Optional[str] = None
 
 
-# Initialize the ResumeForge Agent
-resume_agent = ResumeForgeAgent(GEMINI_API_KEY)
+# Initialize the LangGraph ResumeForge Agent
+AGENT_CONFIG = AgentConfig(gemini_api_key=GEMINI_API_KEY)
+resume_agent = LangGraphResumeAgent(AGENT_CONFIG)
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -63,28 +77,40 @@ async def chat_endpoint(request: ChatRequest):
                 status_code=400, detail="Message is required and must be a string"
             )
 
-        # Set current LaTeX content if provided
-        if request.latexContent:
-            resume_agent.set_current_latex(request.latexContent)
-
-        # Convert conversation history to the format expected by the agent
         conversation_history = [
             {"role": msg.role, "content": msg.content}
             for msg in request.conversationHistory
         ]
 
-        # Process the message using the agent
-        result = await resume_agent.process_message(
-            request.message, conversation_history
+        state = await resume_agent.process(
+            user_request=request.message,
+            messages=conversation_history,
+            current_document=request.latexContent or "",
+            mode=request.mode,
+            cursor_position=request.cursorPosition,
+            files_to_modify=request.filesToModify or [],
+            thread_id=request.threadId,
         )
 
+        compilation = state.get("compilation_result")
+        pdf_path = None
+        if compilation and isinstance(compilation, dict):
+            pdf_path = compilation.get("pdf_path")
+
+        success = (compilation or {}).get("status") != "error" if compilation else True
+        tools_used = state.get("tools_used") or []
+
         return ChatResponse(
-            success=result.get("success", True),
-            response=result.get("response"),
-            explanation=result.get("explanation"),
-            modifiedLatex=result.get("modifiedLatex"),
-            error=result.get("error"),
-            toolsUsed=result.get("toolsUsed"),
+            mode=state.get("mode", request.mode),
+            response=state.get("agent_response"),
+            edits=state.get("file_diffs"),
+            compilation_result=compilation,
+            preview_url=pdf_path,
+            success=success,
+            explanation=state.get("agent_response"),
+            modifiedLatex=state.get("generated_code"),
+            toolsUsed=tools_used,
+            threadId=state.get("thread_id"),
         )
 
     except HTTPException:
@@ -103,7 +129,7 @@ async def health_check():
 async def reset_session():
     """Reset the conversation and session state"""
     try:
-        resume_agent.reset_conversation()
+        # The LangGraph agent is stateless between runs, so no action needed.
         return {"success": True, "message": "Session reset successfully"}
     except Exception as e:
         raise HTTPException(
@@ -113,68 +139,32 @@ async def reset_session():
 
 @app.post("/compile-latex")
 async def compile_latex_endpoint(request: dict):
-    """Direct endpoint for LaTeX compilation"""
-    try:
-        latex_content = request.get("latexContent")
-        if not latex_content:
-            raise HTTPException(status_code=400, detail="latexContent is required")
+    """Direct endpoint for LaTeX compilation using the shared tooling."""
+    latex_content = request.get("latexContent")
+    if not latex_content:
+        raise HTTPException(status_code=400, detail="latexContent is required")
 
-        from tools import LatexCompilerTool
-
-        compiler = LatexCompilerTool()
-        result = compiler._run(latex_content)
-        success = "compiled successfully" in result.lower()
-
-        return {
-            "success": success,
-            "message": result,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Compilation failed: {str(e)}")
+    outcome = compile_latex(latex_content, AGENT_CONFIG)
+    success = outcome.status == "success"
+    return {
+        "success": success,
+        "log": outcome.log,
+        "errors": outcome.errors,
+        "pdfPath": str(outcome.pdf_path) if outcome.pdf_path else None,
+    }
 
 
-@app.post("/validate-latex")
-async def validate_latex_endpoint(request: dict):
-    """Direct endpoint for LaTeX validation"""
-    try:
-        latex_content = request.get("latexContent")
-        if not latex_content:
-            raise HTTPException(status_code=400, detail="latexContent is required")
+@app.post("/format-latex")
+async def format_latex_endpoint(request: dict):
+    """Apply deterministic formatting to provided LaTeX content."""
+    latex_content = request.get("latexContent")
+    if latex_content is None:
+        raise HTTPException(status_code=400, detail="latexContent is required")
 
-        from tools import LatexValidatorTool
-
-        validator = LatexValidatorTool()
-        result = validator._run(latex_content)
-
-        return {
-            "success": True,
-            "validation": result,
-            "isValid": "looks good" in result.lower(),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
-
-
-@app.post("/generate-template")
-async def generate_template_endpoint(request: dict):
-    """Direct endpoint for template generation"""
-    try:
-        style = request.get("style", "modern")
-
-        from tools import LatexTemplateGeneratorTool
-
-        generator = LatexTemplateGeneratorTool()
-        result = generator._run(style)
-
-        return {
-            "success": True,
-            "template": result,
-            "style": style,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Template generation failed: {str(e)}"
-        )
+    return {
+        "success": True,
+        "formatted": format_latex(latex_content),
+    }
 
 
 if __name__ == "__main__":
