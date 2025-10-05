@@ -60,10 +60,10 @@ def ask_with_gemini(state: AgentState, agent_config: AgentConfig) -> AgentState:
 
     message_sequence: List = [SystemMessage(content=ASK_SYSTEM_PROMPT)]
     if context:
+        message_sequence.append(SystemMessage(content=f"Document context:\n{context}"))
+    if document:
         message_sequence.append(
-            SystemMessage(
-                content=f"Document context:\n{context}\n---\nCurrent document snippet:\n```latex\n{document[:4000]}\n```"
-            )
+            SystemMessage(content=f"Current document:\n```latex\n{document}\n```")
         )
 
     message_sequence.extend(_build_history(state.get("messages", [])))
