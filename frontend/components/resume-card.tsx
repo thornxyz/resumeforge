@@ -26,7 +26,7 @@ export default function ResumeCard({ resume }: ResumeCardProps) {
       try {
         await deleteResume(resume.id);
         toast.success("Resume deleted successfully");
-      } catch (error) {
+      } catch {
         toast.error("Failed to delete resume");
       }
     }

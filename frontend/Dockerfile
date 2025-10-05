@@ -2,15 +2,13 @@
 FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat
 
-# Install pnpm
+# Enable pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy package files
+# Install deps
 COPY package.json pnpm-lock.yaml ./
-
-# Install dependencies
 RUN pnpm install --frozen-lockfile
 
 # Stage 2: Builder
@@ -19,14 +17,14 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy dependencies from deps stage
+# Bring node_modules and source
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client (ensures Query Engine for alpine and types are in build)
 RUN npx prisma generate
 
-# Build Next.js application
+# Build Next.js standalone output
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
@@ -37,26 +35,32 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
-# Copy necessary files from builder
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copy production artifacts
+# Standalone server and node_modules subset
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# Next.js static assets
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Prisma schema and migrations (required for migrate deploy)
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
-# Create cache directory with proper permissions
-RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next
+# Caches and uploads directories
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next \
+  && mkdir -p public/uploads && chown -R nextjs:nodejs public/uploads
 
-# Create uploads directory with proper permissions for PDF storage
-RUN mkdir -p public/uploads && chown -R nextjs:nodejs public/uploads
-
+# Ensure Prisma CLI is available at runtime:
+# - If @prisma/cli is a devDependency, prefer using npx which downloads a temp binary.
+# - If you want faster startup and offline, add prisma as a production dependency.
+# Using npx here to avoid inflating image size.
 USER nextjs
 
 EXPOSE 3000
-
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Apply DB migrations on startup, then start the server
+# Requires DATABASE_URL to be provided at runtime.
+CMD ["sh", "-c", "npx --yes prisma migrate deploy && node server.js"]

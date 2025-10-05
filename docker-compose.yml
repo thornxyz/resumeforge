@@ -23,6 +23,22 @@ services:
     depends_on:
       - postgres
 
+  code-agent:
+    build:
+      context: ./code-agent
+      dockerfile: Dockerfile
+    container_name: resume-code-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - LATEX_API_URL=http://latex-api:8000
+      - LATEX_TEMP_DIR=/tmp/latex_compile
+    ports:
+      - "8001:8001"
+    depends_on:
+      - latex-api
+
   frontend:
     build:
       context: ./frontend
@@ -36,7 +52,7 @@ services:
       - AUTH_TRUST_HOST=true
       - NEXTAUTH_URL=http://localhost:3000
       - LATEX_API_URL=http://latex-api:8000
-      - FASTAPI_URL=http://host.docker.internal:8001
+      - FASTAPI_URL=http://code-agent:8001
     ports:
       - "3000:3000"
     volumes:
@@ -44,8 +60,7 @@ services:
     depends_on:
       - postgres
       - latex-api
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - code-agent
 
 volumes:
   pgdata:

@@ -11,4 +11,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "requests>=2.32.4",
     "uvicorn>=0.35.0",
+    "langgraph>=0.2.27",
+    "langchain-google-genai>=2.0.4",
+    "langchain-mcp>=0.1.3",
 ]

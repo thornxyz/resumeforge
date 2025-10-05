@@ -1,9 +1,9 @@
-import Editor from "@monaco-editor/react";
+import Editor, { type Monaco } from "@monaco-editor/react";
 import latex from "monaco-latex";
 import { LatexEditorProps } from "@/lib/types";
 
 export default function LatexEditor({ value, onChange }: LatexEditorProps) {
-  const handleEditorWillMount = (monaco: any) => {
+  const handleEditorWillMount = (monaco: Monaco) => {
     // Register LaTeX language
     monaco.languages.register({ id: "latex" });
 
@@ -11,9 +11,21 @@ export default function LatexEditor({ value, onChange }: LatexEditorProps) {
     monaco.languages.setMonarchTokensProvider("latex", latex);
 
     // Add LaTeX-specific autocomplete suggestions
-    monaco.languages.registerCompletionItemProvider("latex", {
-      provideCompletionItems: (model: any, position: any) => {
-        const suggestions = [
+    type CompletionProvider = Parameters<
+      Monaco["languages"]["registerCompletionItemProvider"]
+    >[1];
+
+    const completionProvider: CompletionProvider = {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = new monaco.Range(
+          position.lineNumber,
+          word.startColumn,
+          position.lineNumber,
+          word.endColumn
+        );
+
+        const baseSuggestions = [
           // Document structure
           {
             label: "\\documentclass",
@@ -115,9 +127,19 @@ export default function LatexEditor({ value, onChange }: LatexEditorProps) {
           },
         ];
 
+        const suggestions = baseSuggestions.map((suggestion) => ({
+          ...suggestion,
+          range,
+        }));
+
         return { suggestions };
       },
-    });
+    };
+
+    monaco.languages.registerCompletionItemProvider(
+      "latex",
+      completionProvider
+    );
 
     // Add bracket matching
     monaco.languages.setLanguageConfiguration("latex", {

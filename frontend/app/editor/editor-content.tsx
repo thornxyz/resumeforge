@@ -6,7 +6,7 @@ import LatexEditor from "@/components/editor";
 import axios from "axios";
 import { toast } from "sonner";
 import Link from "next/link";
-import { User, Resume, EditorContentProps, Message } from "@/lib/types";
+import { EditorContentProps, Message } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -23,10 +23,7 @@ const PdfPreview = dynamic(() => import("@/components/pdf-preview"), {
   ssr: false,
 });
 
-export default function EditorContent({
-  user,
-  initialResume,
-}: EditorContentProps) {
+export default function EditorContent({ initialResume }: EditorContentProps) {
   const [latex, setLatex] = useState<string>(
     initialResume?.latexContent ||
       "\\documentclass{article}\\begin{document}Hello, world!\\end{document}"
