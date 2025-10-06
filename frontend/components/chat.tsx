@@ -12,7 +12,7 @@ import remarkGfm from "remark-gfm";
 function Chat({
   latexContent,
   onLatexUpdate,
-  onCompile,
+  onAgentProposal,
   messages,
   onMessagesUpdate,
 }: ChatProps) {
@@ -116,13 +116,8 @@ function Chat({
           response.data.modifiedLatex &&
           response.data.modifiedLatex !== latexContent
         ) {
-          // Apply the change directly
-          onLatexUpdate(response.data.modifiedLatex);
-
-          // Trigger compilation with the new content directly
-          onCompile(response.data.modifiedLatex);
-
-          toast.success("Code updated and compiled successfully!");
+          onAgentProposal(response.data.modifiedLatex);
+          toast.success("AI edits compiled. Review the highlighted changes.");
         } else if (response.data.modifiedLatex && !response.data.success) {
           // If there's modified LaTeX but operation failed, still update but don't compile
           onLatexUpdate(response.data.modifiedLatex);
@@ -249,13 +244,8 @@ function Chat({
           response.data.modifiedLatex &&
           response.data.modifiedLatex !== latexContent
         ) {
-          // Apply the change directly
-          onLatexUpdate(response.data.modifiedLatex);
-
-          // Trigger compilation with the new content directly
-          onCompile(response.data.modifiedLatex);
-
-          toast.success("Code updated and compiled successfully!");
+          onAgentProposal(response.data.modifiedLatex);
+          toast.success("AI edits compiled. Review the highlighted changes.");
         }
       } else {
         throw new Error(response.data?.error || "Failed to get response");

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -11,6 +12,9 @@ import requests
 from requests import RequestException
 
 from ..config import AgentConfig
+
+
+logger = logging.getLogger("resume_agent.tools.compiler")
 
 
 @dataclass
@@ -32,6 +36,7 @@ class CompilationOutcome:
 def compile_latex(document: str, config: AgentConfig) -> CompilationOutcome:
     """Compile LaTeX by delegating to the external latex-api service."""
     if not document.strip():
+        logger.warning("compile_latex called with empty document")
         return CompilationOutcome(
             status="error",
             log="Empty document provided",
@@ -43,6 +48,7 @@ def compile_latex(document: str, config: AgentConfig) -> CompilationOutcome:
     url = config.latex_api_url.rstrip("/") + "/compile"
 
     try:
+        logger.info("Posting document to latex-api | url=%s", url)
         response = requests.post(
             url,
             files={
@@ -51,6 +57,7 @@ def compile_latex(document: str, config: AgentConfig) -> CompilationOutcome:
             timeout=config.latex_api_timeout,
         )
     except RequestException as exc:
+        logger.exception("latex-api request failed | url=%s", url)
         return CompilationOutcome(
             status="error",
             log=str(exc),
@@ -60,6 +67,7 @@ def compile_latex(document: str, config: AgentConfig) -> CompilationOutcome:
 
     content_type = response.headers.get("content-type", "")
     if response.status_code == 200 and "application/pdf" in content_type:
+        logger.info("latex-api compilation succeeded | status=%s", response.status_code)
         Path(config.temp_dir).mkdir(parents=True, exist_ok=True)
         pdf_path = Path(config.temp_dir) / f"latex_api_{uuid4().hex}.pdf"
         pdf_path.write_bytes(response.content)
@@ -86,6 +94,12 @@ def compile_latex(document: str, config: AgentConfig) -> CompilationOutcome:
 
     if not errors:
         errors = [f"latex-api responded with status {response.status_code}".strip()]
+
+    logger.error(
+        "latex-api compilation failed | status=%s errors=%s",
+        response.status_code,
+        errors,
+    )
 
     return CompilationOutcome(
         status="error",

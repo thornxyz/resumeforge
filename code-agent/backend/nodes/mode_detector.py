@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, List
 
 from ..state import AgentState
+
+
+logger = logging.getLogger("resume_agent.mode_detector")
 
 ASK_KEYWORDS: List[str] = [
     "explain",
@@ -44,6 +48,13 @@ def detect_mode(state: AgentState) -> AgentState:
         mode = "edit"
     elif _contains_keyword(request, ASK_KEYWORDS):
         mode = "ask"
+
+    logger.info(
+        "Mode detector results | explicit=%s detected=%s request_preview=%s",
+        explicit_mode,
+        mode,
+        request[:80].replace("\n", " "),
+    )
 
     next_state: AgentState = {
         "mode": mode,

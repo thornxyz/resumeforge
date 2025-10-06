@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Iterable, List
 
@@ -12,15 +13,28 @@ from ..config import AgentConfig
 from ..state import AgentState
 from ..utils.llm_output import split_explanation_and_code, ensure_complete_document
 
+
+logger = logging.getLogger("resume_agent.llm")
+
 ASK_SYSTEM_PROMPT = (
-    "You are a LaTeX expert mentor. Explain concepts clearly, reference the "
-    "provided document context when helpful, and include short code examples "
-    "inside ```latex blocks when relevant."
+    "You are a helpful LaTeX assistant in 'Ask Mode'. Your role is to answer "
+    "questions, explain concepts, and provide guidance conversationally. You "
+    "must not generate a full, modified LaTeX document. You can include "
+    "small, illustrative ```latex code snippets if necessary, but your "
+    "primary output should be explanatory text."
 )
 
 EDIT_SYSTEM_PROMPT = (
-    "You are a LaTeX code editor. Produce updated LaTeX that fully replaces "
-    "the existing document. Maintain required packages and structure."
+    "You are a specialized LaTeX code generation assistant in 'Edit Mode'. "
+    "Your task is to produce precise LaTeX code modifications. You must "
+    "follow these rules strictly:\n"
+    "1. Start your response with a single, concise sentence describing the "
+    "change (e.g., 'Added a new Education section.').\n"
+    "2. After the description, provide only the complete, updated LaTeX "
+    "document inside a ```latex code block.\n"
+    "3. Do NOT include any other explanations, questions, or alternative "
+    "suggestions. Your response must contain only the one-line description "
+    "and the code block."
 )
 
 
@@ -69,9 +83,21 @@ def ask_with_gemini(state: AgentState, agent_config: AgentConfig) -> AgentState:
     message_sequence.extend(_build_history(state.get("messages", [])))
     message_sequence.append(HumanMessage(content=user_request))
 
+    logger.info(
+        "Invoking ASK LLM | context_len=%d doc_len=%d history=%d",
+        len(context),
+        len(document),
+        len(state.get("messages", [])),
+    )
+
     result = llm.invoke(message_sequence)
     text = getattr(result, "content", None) or getattr(result, "text", "")
     explanation, _ = split_explanation_and_code(text)
+
+    logger.info(
+        "ASK LLM completed | explanation_len=%d",
+        len(explanation or text),
+    )
 
     return {
         "agent_response": explanation or text,
@@ -97,8 +123,9 @@ def edit_with_gemini(state: AgentState, agent_config: AgentConfig) -> AgentState
 
     system_message = SystemMessage(content=EDIT_SYSTEM_PROMPT)
     instructions = (
-        "Always return the full LaTeX document between ```latex fences."
-        "\nRespond with explanation first, then the code block."
+        "Follow the rules for 'Edit Mode' precisely. Your entire response "
+        "should consist of a single descriptive sentence followed by the full "
+        "updated LaTeX document in a code block."
     )
 
     message_sequence: List = [system_message]
@@ -132,6 +159,13 @@ def edit_with_gemini(state: AgentState, agent_config: AgentConfig) -> AgentState
         )
     )
 
+    logger.info(
+        "Invoking EDIT LLM | doc_len=%d diagnostics=%s history=%d",
+        len(document),
+        compilation_status,
+        len(state.get("messages", [])),
+    )
+
     result = llm.invoke(message_sequence)
     text = getattr(result, "content", None) or getattr(result, "text", "")
     explanation, latex = split_explanation_and_code(text)
@@ -144,6 +178,16 @@ def edit_with_gemini(state: AgentState, agent_config: AgentConfig) -> AgentState
         else:
             explanation = "LLM response missing a complete LaTeX document; using existing content."
         latex_document = fallback
+        logger.warning(
+            "EDIT LLM returned incomplete document | using fallback len=%d",
+            len(fallback),
+        )
+    else:
+        logger.info(
+            "EDIT LLM completed | explanation_len=%d latex_len=%d",
+            len(explanation or text),
+            len(latex_document),
+        )
 
     return {
         "agent_response": explanation or text,

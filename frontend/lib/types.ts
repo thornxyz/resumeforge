@@ -31,14 +31,20 @@ export interface EditorContentProps {
 export interface ChatProps {
     latexContent: string;
     onLatexUpdate: (newLatex: string) => void;
-    onCompile: (latexContent?: string) => void;
+    onAgentProposal: (newLatex: string) => void;
     messages: Message[];
     onMessagesUpdate: (messages: Message[]) => void;
+}
+
+export interface LineRange {
+    start: number;
+    end: number;
 }
 
 export interface LatexEditorProps {
     value: string;
     onChange: (val: string | undefined) => void;
+    highlightedLineRanges?: LineRange[];
 }
 
 export interface PdfPreviewProps {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import partial
 from typing import Any, Dict
 from uuid import uuid4
@@ -21,6 +22,9 @@ from .nodes.llm import (
 from .nodes.compiler import compile_document
 from .nodes.formatter import format_document
 from .nodes.file_writer import apply_file_changes
+
+
+logger = logging.getLogger("resume_agent.workflow")
 
 
 def _route_mode(state: AgentState) -> str:
@@ -48,6 +52,11 @@ class LangGraphResumeAgent:
         self.config = config or load_config()
         self._registry = MCPRegistry(self.config)
         self._graph = self._build_graph(self.config, self._registry)
+        logger.info(
+            "LangGraph agent initialized | model=%s max_iterations=%d",
+            self.config.gemini_model,
+            self.config.max_iterations,
+        )
 
     @staticmethod
     def _build_graph(config: AgentConfig, registry: MCPRegistry):
@@ -104,6 +113,12 @@ class LangGraphResumeAgent:
         initial_state["thread_id"] = thread_id
 
         await self._registry.ensure_initialized()
+        logger.info(
+            "Starting graph execution | thread=%s mode=%s iteration=%s",
+            thread_id,
+            initial_state.get("mode"),
+            initial_state.get("iteration_count"),
+        )
         result: AgentState = await self._graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": thread_id}},
@@ -112,6 +127,13 @@ class LangGraphResumeAgent:
         tools_used = self._registry.drain_invocations()
         if tools_used:
             result["tools_used"] = tools_used
+            logger.info(
+                "Graph execution complete | thread=%s tools=%s",
+                thread_id,
+                ",".join(tools_used),
+            )
+        else:
+            logger.info("Graph execution complete | thread=%s no tools used", thread_id)
         return result
 
     async def process(
@@ -136,4 +158,10 @@ class LangGraphResumeAgent:
         }
         if thread_id:
             state["thread_id"] = thread_id
+        logger.info(
+            "Processing request | thread=%s mode=%s files=%d",
+            thread_id,
+            state["mode"],
+            len(state["files_to_modify"]),
+        )
         return await self.ainvoke(state)

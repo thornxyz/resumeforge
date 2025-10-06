@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -7,9 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.agent import LangGraphResumeAgent
-from backend.config import AgentConfig
+from backend.config import AgentConfig, load_config
 from backend.tools.compiler import compile_latex
 from backend.tools.formatter import format_latex
+
+
+log_level = os.getenv("AGENT_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("resume_agent.main")
 
 # Load environment variables
 load_dotenv()
@@ -67,7 +76,12 @@ class ChatResponse(BaseModel):
 
 
 # Initialize the LangGraph ResumeForge Agent
-AGENT_CONFIG = AgentConfig(gemini_api_key=GEMINI_API_KEY)
+AGENT_CONFIG = load_config()
+logger.info(
+    "Agent configuration loaded | model=%s latex_api_url=%s",
+    AGENT_CONFIG.gemini_model,
+    AGENT_CONFIG.latex_api_url,
+)
 resume_agent = LangGraphResumeAgent(AGENT_CONFIG)
 
 
@@ -79,6 +93,13 @@ async def chat_endpoint(request: ChatRequest):
             raise HTTPException(
                 status_code=400, detail="Message is required and must be a string"
             )
+
+        logger.info(
+            "Received chat request | mode=%s thread=%s message_len=%d",
+            request.mode,
+            request.threadId,
+            len(request.message),
+        )
 
         conversation_history = [
             {"role": msg.role, "content": msg.content}
@@ -95,6 +116,14 @@ async def chat_endpoint(request: ChatRequest):
             thread_id=request.threadId,
         )
 
+        logger.info(
+            "Agent process complete | thread=%s mode=%s tools=%s compilation_status=%s",
+            state.get("thread_id"),
+            state.get("mode"),
+            ",".join(state.get("tools_used") or []),
+            (state.get("compilation_result") or {}).get("status"),
+        )
+
         compilation = state.get("compilation_result")
         pdf_path = None
         if compilation and isinstance(compilation, dict):
@@ -102,6 +131,7 @@ async def chat_endpoint(request: ChatRequest):
 
         success = (compilation or {}).get("status") != "error" if compilation else True
         tools_used = state.get("tools_used") or []
+        modified_latex = state.get("generated_code") if success else None
 
         return ChatResponse(
             mode=state.get("mode", request.mode),
@@ -111,15 +141,16 @@ async def chat_endpoint(request: ChatRequest):
             preview_url=pdf_path,
             success=success,
             explanation=state.get("agent_response"),
-            modifiedLatex=state.get("generated_code"),
+            modifiedLatex=modified_latex,
             toolsUsed=tools_used,
             threadId=state.get("thread_id"),
         )
 
     except HTTPException:
+        logger.exception("HTTP error while processing chat request")
         raise
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.exception("Unexpected error during chat request handling")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

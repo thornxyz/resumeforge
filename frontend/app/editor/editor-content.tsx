@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import LatexEditor from "@/components/editor";
 import axios from "axios";
 import { toast } from "sonner";
 import Link from "next/link";
-import { EditorContentProps, Message } from "@/lib/types";
+import { EditorContentProps, LineRange, Message } from "@/lib/types";
+import { computeChangedLineRanges } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,10 @@ export default function EditorContent({ initialResume }: EditorContentProps) {
   const [editorWidth, setEditorWidth] = useState<number>(50); // Percentage width
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"code" | "chat">("code");
+  const [pendingLatex, setPendingLatex] = useState<string | null>(null);
+  const [baselineLatex, setBaselineLatex] = useState<string | null>(null);
+  const [pendingHighlights, setPendingHighlights] = useState<LineRange[]>([]);
+  const suppressNextEditorChangeRef = useRef(false);
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([
@@ -168,6 +173,55 @@ export default function EditorContent({ initialResume }: EditorContentProps) {
     }
   };
 
+  const clearPendingState = () => {
+    setPendingLatex(null);
+    setBaselineLatex(null);
+    setPendingHighlights([]);
+  };
+
+  const handleEditorChange = (val: string | undefined) => {
+    if (suppressNextEditorChangeRef.current) {
+      suppressNextEditorChangeRef.current = false;
+      return;
+    }
+
+    const nextValue = val ?? "";
+    setLatex(nextValue);
+    if (pendingLatex !== null) {
+      clearPendingState();
+    }
+  };
+
+  const handleAgentProposal = (proposedLatex: string) => {
+    const previousLatex = latex;
+    setBaselineLatex(previousLatex);
+    setPendingLatex(proposedLatex);
+    setPendingHighlights(
+      computeChangedLineRanges(previousLatex, proposedLatex)
+    );
+    suppressNextEditorChangeRef.current = true;
+    setLatex(proposedLatex);
+    setActiveTab("code");
+    toast.success("AI edits compiled. Review the highlighted changes.");
+    void handleCompile(proposedLatex);
+  };
+
+  const handleApprovePending = () => {
+    if (!pendingLatex) return;
+    clearPendingState();
+    toast.success("AI edits approved.");
+  };
+
+  const handleUndoPending = () => {
+    if (baselineLatex !== null) {
+      suppressNextEditorChangeRef.current = true;
+      setLatex(baselineLatex);
+      void handleCompile(baselineLatex);
+    }
+    clearPendingState();
+    toast.info("AI edits reverted.");
+  };
+
   const handleSave = async () => {
     if (!resumeTitle.trim()) {
       toast.error("Please enter a title for your resume");
@@ -282,15 +336,42 @@ export default function EditorContent({ initialResume }: EditorContentProps) {
           {/* Tab Content */}
           <div className="flex-1 overflow-hidden">
             {activeTab === "code" ? (
-              <LatexEditor
-                value={latex}
-                onChange={(val) => setLatex(val ?? "")}
-              />
+              <div className="flex h-full flex-col">
+                {pendingLatex && (
+                  <div className="flex items-center justify-between border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 sm:text-sm">
+                    <span>AI edits pending review</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleUndoPending}
+                        className="rounded border border-blue-200 px-2 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-100 sm:text-sm"
+                      >
+                        Undo
+                      </button>
+                      <button
+                        onClick={handleApprovePending}
+                        className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 sm:text-sm"
+                      >
+                        Approve
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="flex-1">
+                  <LatexEditor
+                    value={latex}
+                    onChange={handleEditorChange}
+                    highlightedLineRanges={pendingHighlights}
+                  />
+                </div>
+              </div>
             ) : (
               <Chat
                 latexContent={latex}
-                onLatexUpdate={setLatex}
-                onCompile={handleCompile}
+                onLatexUpdate={(newLatex) => {
+                  setLatex(newLatex);
+                  clearPendingState();
+                }}
+                onAgentProposal={handleAgentProposal}
                 messages={messages}
                 onMessagesUpdate={setMessages}
               />
