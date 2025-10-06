@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(await pdfFile.arrayBuffer());
         await writeFile(filePath, buffer);
 
-        const pdfUrl = `/uploads/${fileName}`;
+        const pdfUrl = `/api/uploads/${fileName}`;
 
         // Save to database
         const resume = await prisma.resume.create({

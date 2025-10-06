@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest) {
             const buffer = Buffer.from(await pdfFile.arrayBuffer());
             await writeFile(filePath, buffer);
 
-            pdfUrl = `/uploads/${fileName}`;
+            pdfUrl = `/api/uploads/${fileName}`;
         }
 
         // Update in database
