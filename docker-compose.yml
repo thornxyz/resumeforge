@@ -23,6 +23,17 @@ services:
     depends_on:
       - postgres
 
+  texlab-lsp:
+    build:
+      context: ./texlab-lsp
+      dockerfile: Dockerfile
+    container_name: resume-texlab-lsp
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - uploads:/workspace
+
   code-agent:
     build:
       context: ./code-agent
@@ -53,6 +64,7 @@ services:
       - NEXTAUTH_URL=http://localhost:3000
       - LATEX_API_URL=http://latex-api:8000
       - FASTAPI_URL=http://code-agent:8001
+      - TEXLAB_LSP_URL=ws://texlab-lsp:8002
     ports:
       - "3000:3000"
     volumes:

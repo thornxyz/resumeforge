@@ -1,52 +1,116 @@
-## High-level architecture
+## Architecture Overview
 
-- `frontend/` (Next.js 15 App Router + TypeScript) drives the Monaco editor UI (`components/editor.tsx`), chat panel, dashboard, and API routes under `app/api/*`.
-- `code-agent/` hosts the FastAPI bridge (`main.py`) that proxies chat calls to the LangGraph workflow under `backend/` and exposes `/chat`, `/compile-latex`, and `/format-latex`.
-- `code-agent/backend/` contains LangGraph nodes (mode detection, parser, Gemini ask/edit, compiler, formatter, file writer), utility parsers, and an in-process MCP registry for tool calls.
-- `latex-api/` is an isolated FastAPI service that shells `pdflatex` and returns either the compiled PDF or diagnostic JSON; both the agent and the frontend `/api/compile` route hit it.
-- `docker-compose.yml` wires `postgres`, `latex-api`, `code-agent`, and `frontend`, sharing compiled PDFs through the `uploads` volume mounted at `public/uploads`.
+ResumeForge is a microservices stack with 4 containers orchestrated via `docker-compose.yml`:
 
-## Request & compile flow
+- **`frontend/`** (Next.js 15 App Router + TypeScript) – Monaco editor UI (`components/editor.tsx`), chat panel, dashboard, API routes under `app/api/*`
+- **`code-agent/`** (FastAPI + LangGraph) – `/chat`, `/compile-latex`, `/format-latex` endpoints; orchestrates Gemini-powered workflow in `backend/`
+- **`latex-api/`** (FastAPI + pdflatex) – Isolated LaTeX compiler returning PDFs or JSON diagnostics
+- **`postgres`** – User auth (NextAuth) and resume storage (Prisma)
 
-- `frontend/app/api/chat/route.ts` forwards sanitized payloads (message string, last 10 messages, normalized mode, optional LaTeX, `threadId`) to `${FASTAPI_URL}/chat`.
-- `components/chat.tsx` maintains a persistent `threadId`, toggles "ask"/"edit", and expects `mode`, `modifiedLatex`, `explanation`, `toolsUsed`, and `compilation_result` fields from the agent.
-- `app/editor/editor-content.tsx` applies AI proposals via `onAgentProposal`, highlights changed lines with `computeChangedLineRanges`, auto-compiles through `/api/compile`, and keeps the PDF URL ready for save/update flows.
-- `/app/api/compile/route.ts` streams multipart blobs to `LATEX_API_URL/compile`; `/api/save-resume` and `/api/update-resume` persist PDFs to `public/uploads` and Prisma using multipart FormData.
+PDFs are shared via the `uploads` volume mounted at `frontend/public/uploads`.
 
-## LangGraph agent rules
+## Critical Data Flow
 
-- `LangGraphResumeAgent` builds `mode_detector → parser → (gemini_ask | gemini_edit) → compiler → formatter → file_writer`, re-entering `gemini_edit` until compilation succeeds or `AgentConfig.max_iterations` (default 3) is reached.
-- `parser.parse_context` uses `utils.latex_parser.analyse_document` to surface packages, sections, and a cursor-centric snippet that seed Gemini system prompts.
-- `nodes.llm.edit_with_gemini` enforces a one-line summary followed by a full document inside `latex`; `ensure_complete_document` drops partial drafts and falls back to the prior LaTeX.
-- `nodes.compiler` and `nodes.formatter` call MCP tools backed by `backend/tools/*`; every invocation is recorded so the frontend can display `toolsUsed`.
-- `nodes.file_writer` writes only when `files_to_modify` targets existing paths with allowed suffixes (`.tex/.bib/.cls/.sty`); otherwise edits stay in memory.
+### Chat Request Pipeline
 
-## Frontend conventions
+1. Frontend POST to `/api/chat/route.ts` → sanitizes payload (message, last 10 messages, mode, latexContent, threadId)
+2. Forwards to `${FASTAPI_URL}/chat` → `code-agent/main.py` receives ChatRequest
+3. LangGraph workflow executes: `mode_detector → parser → gemini_{ask|edit} → compiler → formatter → file_writer`
+4. Returns ChatResponse with `mode`, `modifiedLatex`, `explanation`, `toolsUsed`, `compilation_result`
+5. Frontend applies via `onAgentProposal`, highlights diffs with `computeChangedLineRanges`, auto-compiles through `/api/compile`
 
-- `EditorContent` tracks `pendingLatex` vs `baseline`, enabling undo/approve flows and Monaco decorations (see `components/editor.tsx`) for visual diffing.
-- `components/chat.tsx` trims conversation history to the last 10 messages, retries via `/api/chat`, and surfaces toast notifications keyed to `compilation_result`.
-- Server actions in `lib/actions.ts` always call `auth()` and reuse the shared Prisma client from `prisma.ts`; invalidate dashboard data with `revalidatePath("/")` after mutations.
-- Dashboard surfaces (`components/dashboard.tsx`, `resume-card.tsx`) expect ISO date strings and wire delete/edit actions through those server functions.
+### LangGraph State Machine (`backend/agent.py`)
 
-## Data, auth, and storage
+- **AgentState** (TypedDict in `state.py`) is the shared graph state—nodes incrementally populate fields like `generated_code`, `compilation_result`, `iteration_count`
+- **Retry logic**: `_route_compilation` re-enters `gemini_edit` on error until `max_iterations` (default 3) or success
+- **Conditional routing**: `_route_mode` branches to `gemini_ask` (conversational) or `gemini_edit` (code generation) based on detected mode
 
-- Prisma schema lives in `frontend/prisma/schema.prisma`; run `npx prisma generate` after schema edits so `pnpm build` has the generated client.
-- NextAuth (`auth.ts` + `auth.config.ts`) is configured for Google OAuth with JWT sessions—server components gate access by calling `auth()`.
-- Resume PDFs land in `public/uploads` with sanitized filenames; updates reuse the existing filename when present to avoid broken links.
-- `DATABASE_URL` must point at the same Postgres instance the Prisma client uses (`postgres://admin:admin@postgres:5432/resumes` in Docker).
+### LLM Response Contract (`nodes/llm.py`)
 
-## Local development loops
+- **Ask mode**: Conversational response, no full document generation
+- **Edit mode**: MUST return ` one-line summary + ```latex full_document````. Enforced by  `ensure_complete_document`which validates presence of`\documentclass`, `\begin{document}`, `\end{document}`
+- **Fallback**: If incomplete, `llm.py` reuses `state["current_document"]` and logs warning
 
-- Start infrastructure with `docker compose up -d postgres latex-api`; add `code-agent`/`frontend` or run the full stack once env vars are in place.
-- Frontend: from `frontend/`, run `pnpm install`, `npx prisma generate`, then `pnpm dev`; use `pnpm lint` / `pnpm build` before shipping changes.
-- Agent: from `code-agent/`, export `GEMINI_API_KEY` (plus optional `GEMINI_MODEL`, `AGENT_MAX_ITERATIONS`, `LATEX_API_URL`) and run `uv run main.py`; add dependencies via `uv sync`/`uv pip install`.
-- Outside Docker set `FASTAPI_URL=http://localhost:8001` and `LATEX_API_URL=http://localhost:8000` so frontend API routes reach local services.
-- Quick smoke tests hit `/health` on both FastAPI apps and compile a sample resume through `/api/compile`.
+## MCP Tooling (`backend/mcp/session.py`)
 
-## Gotchas & tips
+Custom in-process MCP implementation (`InProcessMCPSession`) exposes tools without transport layer:
 
-- Edit-mode responses must include the full LaTeX document; partial snippets are discarded and the prior draft is reused.
-- Keep `threadId` stable between chat turns so LangGraph’s `MemorySaver` checkpoint maintains context.
-- The agent caches compiled PDFs under `AgentConfig.temp_dir` (`/tmp/latex_compile` by default); clean it if disk usage spikes.
-- `latex-api` supports `?json=1` for structured logs during debugging; otherwise it streams raw PDFs.
-- There’s no automated test suite yet—lean on the compile loop and the two `/health` endpoints for verification before shipping.
+- **`latex_compiler`**: Delegates to `tools/compiler.py` → POSTs to `latex-api:8000/compile`
+- **`latex_formatter`**: Runs `tools/formatter.py` for whitespace normalization
+- Tool invocations tracked in `MCPRegistry._invocations`, drained after execution to populate `state["tools_used"]`
+
+## Frontend Patterns
+
+### Editor State Management (`app/editor/editor-content.tsx`)
+
+- **Dual state**: `latex` (current) vs `pendingLatex` (AI proposal) vs `baselineLatex` (before proposal)
+- **Diff highlights**: `computeChangedLineRanges` compares old/new, Monaco decorations applied in `components/editor.tsx`
+- **Suppress loop**: `suppressNextEditorChangeRef` prevents re-triggers during programmatic updates
+
+### Chat Conversation (`components/chat.tsx`)
+
+- **ThreadId persistence**: `threadIdRef.current` generated once with `crypto.randomUUID()`, stable across turns for LangGraph's `MemorySaver` checkpointer
+- **History trimming**: `.slice(-10)` keeps only last 10 messages when POSTing to `/api/chat`
+- **Tools display**: Appends `_Tools used: {tools}_` markdown footer if `toolsUsed` array present
+
+### Server Actions (`lib/actions.ts`)
+
+- ALL actions MUST `await auth()` first—throws if unauthorized
+- ALL use shared Prisma client from `prisma.ts` (NOT `new PrismaClient()`)
+- MUST `revalidatePath("/")` after mutations to update dashboard cache
+- Date serialization: `.map(r => ({ ...r, createdAt: r.createdAt.toISOString() }))` to avoid Next.js hydration mismatches
+
+## Development Commands
+
+### Local Setup (Incremental)
+
+```bash
+# Infrastructure only
+docker compose up -d postgres latex-api
+
+# Frontend (separate terminal)
+cd frontend
+pnpm install
+npx prisma generate
+npx prisma migrate deploy  # Apply migrations
+pnpm dev  # http://localhost:3000
+
+# Agent (separate terminal)
+cd code-agent
+export GEMINI_API_KEY=...
+export FASTAPI_URL=http://localhost:8001  # For frontend in .env.local
+export LATEX_API_URL=http://localhost:8000
+uv sync
+uv run main.py  # http://localhost:8001
+```
+
+### Full Docker Stack
+
+```bash
+# Requires .env with GEMINI_API_KEY, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_SECRET
+docker compose up -d
+```
+
+### Smoke Tests
+
+- GET `http://localhost:8001/health` → `{"status": "healthy", ...}`
+- GET `http://localhost:8000/health` → `{"status": "ok"}`
+- POST `/api/compile` with sample LaTeX → should return PDF or JSON error
+
+## Configuration (`code-agent/backend/config.py`)
+
+`AgentConfig` (frozen dataclass) loaded via `load_config()`:
+
+- **Required**: `GEMINI_API_KEY`
+- **Optional**: `GEMINI_MODEL` (default: `gemini-2.0-flash-exp`), `GEMINI_TEMPERATURE` (0.2), `AGENT_MAX_ITERATIONS` (3), `LATEX_API_URL`, `LATEX_API_TIMEOUT`
+- Cached with `@lru_cache(maxsize=1)` for singleton behavior
+
+## Critical Gotchas
+
+1. **Edit mode completeness**: Partial LaTeX snippets are REJECTED—`ensure_complete_document` checks for `\documentclass`, `\begin{document}`, `\end{document}`. Fallback to prior state if missing.
+2. **ThreadId stability**: Must persist `threadId` across chat turns (see `chat.tsx` `threadIdRef`) or LangGraph loses conversation context.
+3. **Prisma regeneration**: Run `npx prisma generate` after any `schema.prisma` change, BEFORE `pnpm build`.
+4. **PDF caching**: Agent stores PDFs in `AgentConfig.temp_dir` (`/tmp/latex_compile`)—clean manually if disk fills.
+5. **LaTeX API modes**: Default streams PDF bytes; add `?json=1` for JSON diagnostics (see `latex-api/main.py`).
+6. **Docker vs local URLs**: In Docker, services use internal DNS (`http://latex-api:8000`); outside Docker use `localhost` ports.
+7. **No test suite**: Verify via compile loop + health endpoints. Future: Add pytest for agent, Playwright for frontend.
